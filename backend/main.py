@@ -66,7 +66,13 @@ async def lifespan(app: FastAPI):
 
 
 
-app = FastAPI(title="Clonepage API", lifespan=lifespan)
+app = FastAPI(
+    title="Clonepage API",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 
 
 class ArticleCreate(BaseModel):
