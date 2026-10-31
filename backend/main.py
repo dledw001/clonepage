@@ -37,6 +37,7 @@ def database():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
     with database() as db:
         db.execute("""
                    CREATE TABLE IF NOT EXISTS articles (
@@ -44,10 +45,25 @@ async def lifespan(app: FastAPI):
                                                            title TEXT NOT NULL,
                                                            url TEXT NOT NULL UNIQUE,
                                                            is_read INTEGER NOT NULL DEFAULT 0,
-                                                           saved_at TEXT NOT NULL
+                                                           saved_at TEXT NOT NULL,
+                                                           archived_at TEXT DEFAULT NULL
                    )
                    """)
+
+        # Migrate existing databases without deleting articles.
+        columns = {
+            row["name"]
+            for row in db.execute("PRAGMA table_info(articles)")
+        }
+
+        if "archived_at" not in columns:
+            db.execute("""
+                       ALTER TABLE articles
+                           ADD COLUMN archived_at TEXT DEFAULT NULL
+                       """)
+
     yield
+
 
 
 app = FastAPI(title="Clonepage API", lifespan=lifespan)
@@ -59,7 +75,9 @@ class ArticleCreate(BaseModel):
 
 
 class ArticleUpdate(BaseModel):
-    is_read: bool
+    is_read: bool | None = None
+    archived: bool | None = None
+    title: str | None = Field(default=None, max_length=200)
 
 
 def serialize(row):
@@ -106,24 +124,65 @@ def create_article(article: ArticleCreate):
         return serialize(row)
 
 
+
 @app.patch("/api/reading/{article_id}")
 def update_article(article_id: str, update: ArticleUpdate):
-    with database() as db:
-        result = db.execute("""
-                            UPDATE articles
-                            SET is_read = ?
-                            WHERE id = ?
-                            """, (int(update.is_read), article_id))
+    changes = update.model_dump(exclude_unset=True)
 
-        if result.rowcount == 0:
-            raise HTTPException(404, "Article not found")
+    if not changes:
+        raise HTTPException(400, "No changes provided")
+
+    assignments = []
+    values = []
+
+    if "is_read" in changes:
+        if update.is_read is None:
+            raise HTTPException(422, "is_read cannot be null")
+
+        assignments.append("is_read = ?")
+        values.append(int(update.is_read))
+
+    if "archived" in changes:
+        if update.archived is None:
+            raise HTTPException(422, "archived cannot be null")
+
+        archived_at = (
+            datetime.now(timezone.utc).isoformat()
+            if update.archived else None
+        )
+
+        assignments.append("archived_at = ?")
+        values.append(archived_at)
+
+    if "title" in changes:
+        if not update.title or not update.title.strip():
+            raise HTTPException(422, "Title cannot be empty")
+
+        assignments.append("title = ?")
+        values.append(update.title.strip())
+
+    values.append(article_id)
+
+    with database() as db:
+        db.execute(
+            f"""
+            UPDATE articles
+            SET {', '.join(assignments)}
+            WHERE id = ?
+            """,
+            values
+        )
 
         row = db.execute(
             "SELECT * FROM articles WHERE id = ?",
             (article_id,)
         ).fetchone()
 
+        if row is None:
+            raise HTTPException(404, "Article not found")
+
         return serialize(row)
+
 
 
 @app.delete("/api/reading/{article_id}", status_code=204)
