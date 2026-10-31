@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field, HttpUrl
 
+from metadata import fetch_title
 
 DB_PATH = Path(
     os.getenv(
@@ -80,7 +81,7 @@ def list_articles():
 @app.post("/api/reading", status_code=201)
 def create_article(article: ArticleCreate):
     url = str(article.url)
-    title = article.title.strip() or urlsplit(url).hostname
+    title = article.title.strip() or fetch_title(url) or urlsplit(url).hostname or url
     article_id = str(uuid4())
     saved_at = datetime.now(timezone.utc).isoformat()
 

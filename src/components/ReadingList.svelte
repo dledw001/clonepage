@@ -187,7 +187,7 @@
             />
             <input
                     bind:value={title}
-                    placeholder="Title (optional)"
+                    placeholder="Title (leave blank to auto-detect)"
                     aria-label="Article title"
             />
             <button type="submit" disabled={saving}>
