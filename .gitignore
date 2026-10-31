@@ -1,0 +1,34 @@
+# Node / Vite
+node_modules/
+dist/
+coverage/
+*.log
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# SQLite databases
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+/data/
+/backend/data/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
