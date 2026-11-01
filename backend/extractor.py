@@ -1,14 +1,66 @@
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import trafilatura
 
 from metadata import is_public_url
-
+from io import BytesIO
+from pypdf import PdfReader
 
 MAX_HTML_BYTES = 2 * 1024 * 1024
 MAX_TEXT_CHARS = 300_000
 
+MAX_PDF_BYTES = 25 * 1024 * 1024
+MAX_PDF_TEXT_CHARS = 2_000_000
+MAX_PDF_PAGES = 1000
+
+
+def extract_pdf_text(data: bytes) -> str:
+    reader = PdfReader(BytesIO(data), strict=False)
+
+    if reader.is_encrypted:
+        raise ValueError("Encrypted PDFs are not supported")
+
+    parts = []
+    total_chars = 0
+
+    for index, page in enumerate(reader.pages):
+        if index >= MAX_PDF_PAGES:
+            break
+
+        # Avoid parsing exceptionally large decompressed
+        # page content streams.
+        contents = page.get_contents()
+
+        if contents is not None:
+            if len(contents.get_data()) > 10 * 1024 * 1024:
+                raise ValueError("PDF page content is too large")
+
+        text = page.extract_text() or ""
+
+        if not text.strip():
+            continue
+
+        remaining = MAX_PDF_TEXT_CHARS - total_chars
+        if remaining <= 0:
+            break
+
+        text = text[:remaining]
+        parts.append(text)
+        total_chars += len(text)
+
+        if total_chars >= MAX_PDF_TEXT_CHARS:
+            break
+
+    result = "\n\n".join(parts).strip()
+
+    if len(result) < 80:
+        raise ValueError(
+            "PDF contains insufficient extractable text; "
+            "it may require OCR"
+        )
+
+    return result
 
 def extract_article_text(url: str) -> str:
     headers = {
@@ -47,22 +99,44 @@ def extract_article_text(url: str) -> str:
                     "content-type", ""
                 ).split(";")[0].strip().lower()
 
-                if content_type not in (
-                        "text/html",
-                        "application/xhtml+xml",
-                ):
-                    raise ValueError("Page is not HTML")
+                # Servers aren't always accurate about MIME types.
+                # Also recognize PDFs by the URL's extension.
+                pdf_expected = (
+                        content_type == "application/pdf"
+                        or urlsplit(current_url).path.lower().endswith(".pdf")
+                )
+
+                max_bytes = (
+                    MAX_PDF_BYTES if pdf_expected else MAX_HTML_BYTES
+                )
+
+                content_length = response.headers.get("content-length")
+                if content_length and int(content_length) > max_bytes:
+                    raise ValueError("Document exceeds download limit")
 
                 body = bytearray()
 
                 for chunk in response.iter_bytes(chunk_size=8192):
-                    if len(body) + len(chunk) > MAX_HTML_BYTES:
-                        raise ValueError("HTML download exceeds 2 MB")
+                    if len(body) + len(chunk) > max_bytes:
+                        raise ValueError("Document exceeds download limit")
 
                     body.extend(chunk)
 
                 if not body:
-                    raise ValueError("Empty HTML response")
+                    raise ValueError("Empty document response")
+
+                # Recognize PDFs by their file signature.
+                if body.startswith(b"%PDF-"):
+                    return extract_pdf_text(bytes(body))
+
+                # Everything else must be HTML.
+                if content_type not in (
+                        "text/html",
+                        "application/xhtml+xml",
+                ):
+                    raise ValueError(
+                        f"Unsupported content type: {content_type}"
+                    )
 
                 text = trafilatura.extract(
                     bytes(body),
@@ -76,4 +150,4 @@ def extract_article_text(url: str) -> str:
 
                 return text.strip()[:MAX_TEXT_CHARS]
 
-        raise ValueError("Too many redirects")
+    raise ValueError("Too many redirects")
