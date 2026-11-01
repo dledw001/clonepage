@@ -1,0 +1,33 @@
+
+{
+  "manifest_version": 3,
+  "name": "Save to Clonepage",
+  "description": "Save webpages to your self-hosted Clonepage reading list.",
+  "version": "0.1.0",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://clonepage.dledwith.com/*"
+  ],
+  "incognito": "spanning",
+  "action": {
+    "default_title": "Save to Clonepage",
+    "default_icon": "icons/bookmark.svg"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "save-to-clonepage@dledwith.com",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "browsingActivity",
+          "websiteContent"
+        ]
+      }
+    }
+  }
+}
