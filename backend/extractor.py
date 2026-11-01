@@ -16,11 +16,11 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 MAX_PDF_TEXT_CHARS = 2_000_000
 MAX_PDF_PAGES = 1000
 
+
 @dataclass(frozen=True)
 class ExtractedDocument:
     text: str
     title: str | None = None
-
 
 
 def clean_pdf_title(value: object) -> str | None:
@@ -29,9 +29,7 @@ def clean_pdf_title(value: object) -> str | None:
 
     title = " ".join(value.split()).strip()
 
-    if not title or title.casefold() in {
-        "untitled", "document", "unknown"
-    }:
+    if not title or title.casefold() in {"untitled", "document", "unknown"}:
         return None
 
     return title[:200]
@@ -55,10 +53,7 @@ def detect_pdf_title(reader: PdfReader, url: str) -> str | None:
             value = xmp.dc_title
 
             if isinstance(value, dict):
-                value = (
-                        value.get("x-default")
-                        or next(iter(value.values()), None)
-                )
+                value = value.get("x-default") or next(iter(value.values()), None)
 
             title = clean_pdf_title(value)
             if title:
@@ -71,12 +66,9 @@ def detect_pdf_title(reader: PdfReader, url: str) -> str | None:
 
     if filename.lower().endswith(".pdf"):
         stem = filename[:-4]
-        return clean_pdf_title(
-            re.sub(r"_+", " ", stem)
-        )
+        return clean_pdf_title(re.sub(r"_+", " ", stem))
 
     return None
-
 
 
 def extract_pdf_text(data: bytes, url: str) -> ExtractedDocument:
@@ -121,11 +113,11 @@ def extract_pdf_text(data: bytes, url: str) -> ExtractedDocument:
 
     if len(result) < 80:
         raise ValueError(
-            "PDF contains insufficient extractable text; "
-            "it may require OCR"
+            "PDF contains insufficient extractable text; " "it may require OCR"
         )
 
     return ExtractedDocument(text=result, title=title)
+
 
 def extract_article_text(url: str) -> ExtractedDocument:
     headers = {
@@ -134,10 +126,10 @@ def extract_article_text(url: str) -> ExtractedDocument:
     }
 
     with httpx.Client(
-            headers=headers,
-            timeout=httpx.Timeout(10.0, connect=5.0),
-            follow_redirects=False,
-            trust_env=False,
+        headers=headers,
+        timeout=httpx.Timeout(10.0, connect=5.0),
+        follow_redirects=False,
+        trust_env=False,
     ) as client:
 
         current_url = url
@@ -160,20 +152,20 @@ def extract_article_text(url: str) -> ExtractedDocument:
 
                 response.raise_for_status()
 
-                content_type = response.headers.get(
-                    "content-type", ""
-                ).split(";")[0].strip().lower()
+                content_type = (
+                    response.headers.get("content-type", "")
+                    .split(";")[0]
+                    .strip()
+                    .lower()
+                )
 
                 # Servers aren't always accurate about MIME types.
                 # Also recognize PDFs by the URL's extension.
-                pdf_expected = (
-                        content_type == "application/pdf"
-                        or urlsplit(current_url).path.lower().endswith(".pdf")
-                )
+                pdf_expected = content_type == "application/pdf" or urlsplit(
+                    current_url
+                ).path.lower().endswith(".pdf")
 
-                max_bytes = (
-                    MAX_PDF_BYTES if pdf_expected else MAX_HTML_BYTES
-                )
+                max_bytes = MAX_PDF_BYTES if pdf_expected else MAX_HTML_BYTES
 
                 content_length = response.headers.get("content-length")
                 if content_length and int(content_length) > max_bytes:
@@ -196,12 +188,10 @@ def extract_article_text(url: str) -> ExtractedDocument:
 
                 # Everything else must be HTML.
                 if content_type not in (
-                        "text/html",
-                        "application/xhtml+xml",
+                    "text/html",
+                    "application/xhtml+xml",
                 ):
-                    raise ValueError(
-                        f"Unsupported content type: {content_type}"
-                    )
+                    raise ValueError(f"Unsupported content type: {content_type}")
 
                 text = trafilatura.extract(
                     bytes(body),
@@ -213,8 +203,6 @@ def extract_article_text(url: str) -> ExtractedDocument:
                 if not text or len(text.strip()) < 80:
                     raise ValueError("No readable article text found")
 
-                return ExtractedDocument(
-                    text=text.strip()[:MAX_TEXT_CHARS]
-                )
+                return ExtractedDocument(text=text.strip()[:MAX_TEXT_CHARS])
 
     raise ValueError("Too many redirects")

@@ -17,6 +17,9 @@
         archived_at: string | null;
         index_status: 'pending' | 'processing' | 'ready' | 'failed';
         indexed_at: string | null;
+        index_error: string | null;
+        index_attempts: number;
+        index_retry_at: string | null;
         snippet?: string | null;
     };
 
@@ -37,7 +40,14 @@
 
     let editingId = $state<string | null>(null);
     let titleDraft = $state('');
-    let busyId = $state<string | null>(null);
+    let busyIds = $state<string[]>([]);
+
+    // A refresh may only replace the list if no write has crossed it.
+    let refreshSequence = 0;
+    let mutationRevision = 0;
+    let pendingWrites = 0;
+    let pendingRefreshes = 0;
+    let refreshQueued = false;
 
     let searchResults = $state<Article[]>([]);
     let searchLoading = $state(false);
@@ -151,18 +161,48 @@
     }
 
     async function refresh() {
+        if (pendingWrites > 0) {
+            refreshQueued = true;
+            return;
+        }
+
+        const sequence = ++refreshSequence;
+        const revision = mutationRevision;
+        pendingRefreshes++;
+        const isCurrent = () =>
+            sequence === refreshSequence && revision === mutationRevision;
+
         try {
-            const response = await fetch('/api/reading');
+            const response = await fetch('/api/reading', { cache: 'no-store' });
 
             if (!response.ok) throw new Error();
 
-            articles = await response.json();
+            const latest: Article[] = await response.json();
+            if (!isCurrent()) return;
+
+            articles = latest;
             searchRevision++;
-            error = '';
+            if (error === 'Could not load the reading list.') error = '';
         } catch {
-            error = 'Could not load the reading list.';
+            if (isCurrent()) error = 'Could not load the reading list.';
         } finally {
-            loaded = true;
+            pendingRefreshes--;
+            if (isCurrent()) loaded = true;
+        }
+    }
+
+    function beginWrite() {
+        pendingWrites++;
+        mutationRevision++;
+        if (pendingRefreshes > 0) refreshQueued = true;
+    }
+
+    function finishWrite() {
+        pendingWrites--;
+        mutationRevision++;
+        if (pendingWrites === 0 && refreshQueued) {
+            refreshQueued = false;
+            void refresh();
         }
     }
 
@@ -209,6 +249,7 @@
 
         saving = true;
         error = '';
+        beginWrite();
 
         try {
             const response = await fetch('/api/reading', {
@@ -232,11 +273,12 @@
             adding = false;
             tab = 'queue';
 
-            await refresh();
+            refreshQueued = true;
         } catch {
             error = 'Could not save the article.';
         } finally {
             saving = false;
+            finishWrite();
         }
     }
 
@@ -244,9 +286,10 @@
         article: Article,
         changes: Record<string, unknown>
     ): Promise<boolean> {
-        if (busyId) return false;
+        if (busyIds.includes(article.id)) return false;
 
-        busyId = article.id;
+        busyIds = [...busyIds, article.id];
+        beginWrite();
 
         try {
             const response = await fetch(
@@ -273,7 +316,31 @@
             error = 'Could not update the article.';
             return false;
         } finally {
-            busyId = null;
+            busyIds = busyIds.filter(id => id !== article.id);
+            finishWrite();
+        }
+    }
+
+    async function retryIndexing(article: Article) {
+        if (busyIds.includes(article.id)) return;
+
+        busyIds = [...busyIds, article.id];
+        beginWrite();
+        try {
+            const response = await fetch(`/api/reading/${article.id}/retry`, {
+                method: 'POST'
+            });
+            if (!response.ok) throw new Error();
+
+            const updated: Article = await response.json();
+            articles = articles.map(a => a.id === updated.id ? updated : a);
+            searchRevision++;
+            error = '';
+        } catch {
+            error = 'Could not retry content search. Refresh and try again.';
+        } finally {
+            busyIds = busyIds.filter(id => id !== article.id);
+            finishWrite();
         }
     }
 
@@ -306,14 +373,17 @@
             title: newTitle
         });
 
-        if (success) editingId = null;
+        if (success && editingId === article.id) editingId = null;
     }
 
     async function remove(article: Article) {
+        if (busyIds.includes(article.id)) return;
         if (!confirm(`Permanently delete "${article.title}"?`)) {
             return;
         }
 
+        busyIds = [...busyIds, article.id];
+        beginWrite();
         try {
             const response = await fetch(
                 `/api/reading/${article.id}`,
@@ -327,6 +397,9 @@
             error = '';
         } catch {
             error = 'Could not delete the article.';
+        } finally {
+            busyIds = busyIds.filter(id => id !== article.id);
+            finishWrite();
         }
     }
 </script>
@@ -447,7 +520,7 @@
                             class="icon-action read-toggle"
                             title={article.is_read ? 'Mark unread' : 'Mark read'}
                             aria-label={article.is_read ? 'Mark unread' : 'Mark read'}
-                            disabled={busyId === article.id}
+                            disabled={busyIds.includes(article.id)}
                             onclick={() => toggleRead(article)}
                     >
                         {#if article.is_read}
@@ -475,7 +548,7 @@
 
                                 <button
                                         type="submit"
-                                        disabled={busyId === article.id}
+                                        disabled={busyIds.includes(article.id)}
                                         title="Save title"
                                 >
                                     <Check size={17} />
@@ -501,6 +574,19 @@
                         {/if}
 
                         <small>{hostname(article.url)}</small>
+                        {#if article.index_status === 'failed'}
+                            <small class="index-error" title={article.index_error ?? undefined}>
+                                Content search unavailable.
+                                {#if article.index_retry_at}Retry scheduled.{/if}
+                                <button
+                                        class="retry-indexing"
+                                        disabled={busyIds.includes(article.id)}
+                                        onclick={() => retryIndexing(article)}
+                                >Retry now</button>
+                            </small>
+                        {:else if article.index_status === 'pending' || article.index_status === 'processing'}
+                            <small>Preparing content search...</small>
+                        {/if}
                         {#if search.trim() && article.snippet}
                             <small class="article-snippet">
                                 {article.snippet}
@@ -513,6 +599,7 @@
                                 class="icon-action"
                                 title="Edit title"
                                 aria-label="Edit title"
+                                disabled={busyIds.includes(article.id)}
                                 onclick={() => startEditing(article)}
                         >
                             <Pencil size={16} />
@@ -522,7 +609,7 @@
                                 class="icon-action"
                                 title={tab === 'queue' ? 'Archive' : 'Restore'}
                                 aria-label={tab === 'queue' ? 'Archive' : 'Restore'}
-                                disabled={busyId === article.id}
+                                disabled={busyIds.includes(article.id)}
                                 onclick={() => toggleArchive(article)}
                         >
                             {#if tab === 'queue'}
@@ -536,6 +623,7 @@
                                 class="icon-action delete"
                                 title="Delete permanently"
                                 aria-label="Delete permanently"
+                                disabled={busyIds.includes(article.id)}
                                 onclick={() => remove(article)}
                         >
                             <Trash2 size={17} />
@@ -881,5 +969,16 @@
         color: var(--muted);
         font-size: 12px;
         padding: 12px 0;
+    }
+
+    .article-info .index-error {
+        color: #df9393;
+    }
+
+    .retry-indexing {
+        padding: 2px 5px;
+        color: var(--highlight);
+        font-size: inherit;
+        text-decoration: underline;
     }
 </style>
