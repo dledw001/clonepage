@@ -54,7 +54,7 @@ def process_next() -> bool:
     logging.info("Indexing %s", url)
 
     try:
-        content = extract_article_text(url)
+        document = extract_article_text(url)
 
         with database() as db:
             db.execute("""
@@ -62,11 +62,15 @@ def process_next() -> bool:
                        SET content = ?,
                            index_status = 'ready',
                            index_error = NULL,
-                           indexed_at = ?
+                           indexed_at = ?,
+                           title = CASE
+                               WHEN title_source = 'auto'
+                                AND ? IS NOT NULL THEN ? ELSE title
+                           END
                        WHERE id = ?
-                       """, (content, timestamp(), article_id))
+                       """, (document.text, timestamp(), document.title, document.title, article_id))
 
-        logging.info("Indexed %s (%s characters)", url, len(content))
+        logging.info("Indexed %s (%s characters), detected title: %s", url, len(document.text), document.title)
 
     except Exception as exc:
         logging.warning("Could not index %s: %s", url, exc)

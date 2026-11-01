@@ -1,11 +1,13 @@
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin, urlsplit, unquote
 
 import httpx
 import trafilatura
+import re
 
 from metadata import is_public_url
 from io import BytesIO
 from pypdf import PdfReader
+from dataclasses import dataclass
 
 MAX_HTML_BYTES = 2 * 1024 * 1024
 MAX_TEXT_CHARS = 300_000
@@ -14,13 +16,76 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 MAX_PDF_TEXT_CHARS = 2_000_000
 MAX_PDF_PAGES = 1000
 
+@dataclass(frozen=True)
+class ExtractedDocument:
+    text: str
+    title: str | None = None
 
-def extract_pdf_text(data: bytes) -> str:
+
+
+def clean_pdf_title(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    title = " ".join(value.split()).strip()
+
+    if not title or title.casefold() in {
+        "untitled", "document", "unknown"
+    }:
+        return None
+
+    return title[:200]
+
+
+def detect_pdf_title(reader: PdfReader, url: str) -> str | None:
+    # First: conventional PDF document metadata.
+    try:
+        metadata = reader.metadata
+        if metadata:
+            title = clean_pdf_title(metadata.title)
+            if title:
+                return title
+    except Exception:
+        pass
+
+    # Second: XMP metadata.
+    try:
+        xmp = reader.xmp_metadata
+        if xmp:
+            value = xmp.dc_title
+
+            if isinstance(value, dict):
+                value = (
+                        value.get("x-default")
+                        or next(iter(value.values()), None)
+                )
+
+            title = clean_pdf_title(value)
+            if title:
+                return title
+    except Exception:
+        pass
+
+    # Final fallback: derive a title from the filename.
+    filename = unquote(urlsplit(url).path.rsplit("/", 1)[-1])
+
+    if filename.lower().endswith(".pdf"):
+        stem = filename[:-4]
+        return clean_pdf_title(
+            re.sub(r"_+", " ", stem)
+        )
+
+    return None
+
+
+
+def extract_pdf_text(data: bytes, url: str) -> ExtractedDocument:
     reader = PdfReader(BytesIO(data), strict=False)
 
     if reader.is_encrypted:
         raise ValueError("Encrypted PDFs are not supported")
 
+    title = detect_pdf_title(reader, url)
     parts = []
     total_chars = 0
 
@@ -60,9 +125,9 @@ def extract_pdf_text(data: bytes) -> str:
             "it may require OCR"
         )
 
-    return result
+    return ExtractedDocument(text=result, title=title)
 
-def extract_article_text(url: str) -> str:
+def extract_article_text(url: str) -> ExtractedDocument:
     headers = {
         "User-Agent": "Clonepage/0.4",
         "Accept": "text/html,application/xhtml+xml",
@@ -127,7 +192,7 @@ def extract_article_text(url: str) -> str:
 
                 # Recognize PDFs by their file signature.
                 if body.startswith(b"%PDF-"):
-                    return extract_pdf_text(bytes(body))
+                    return extract_pdf_text(bytes(body), current_url)
 
                 # Everything else must be HTML.
                 if content_type not in (
@@ -148,6 +213,8 @@ def extract_article_text(url: str) -> str:
                 if not text or len(text.strip()) < 80:
                     raise ValueError("No readable article text found")
 
-                return text.strip()[:MAX_TEXT_CHARS]
+                return ExtractedDocument(
+                    text=text.strip()[:MAX_TEXT_CHARS]
+                )
 
     raise ValueError("Too many redirects")

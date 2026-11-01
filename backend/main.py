@@ -39,6 +39,27 @@ def database():
     finally:
         conn.close()
 
+
+def is_generic_pdf_title(title: str, url: str) -> bool:
+    parsed = urlsplit(url)
+
+    if not parsed.path.lower().endswith(".pdf"):
+        return False
+
+    filename = unquote(parsed.path.rsplit("/", 1)[-1])
+    stem = filename[:-4]
+    hostname = parsed.hostname or ""
+
+    candidates = {
+        hostname.casefold(),
+        filename.casefold(),
+        stem.casefold(),
+        stem.replace("_", " ").casefold(),
+    }
+
+    return title.strip().casefold() in candidates
+
+
 def initialize_search():
     with database() as db:
         db.execute("PRAGMA journal_mode=WAL")
@@ -53,13 +74,31 @@ def initialize_search():
             "index_status": "TEXT NOT NULL DEFAULT 'pending'",
             "index_error": "TEXT",
             "indexed_at": "TEXT",
+            "title_source": "TEXT NOT NULL DEFAULT 'manual'",
         }
+
+        had_title_source = "title_source" in columns
 
         for name, definition in migrations.items():
             if name not in columns:
                 db.execute(
                     f"ALTER TABLE articles ADD COLUMN {name} {definition}"
                 )
+
+
+        if not had_title_source:
+            rows = db.execute("""
+                          SELECT id, title, url FROM articles
+                          """).fetchall()
+
+            for row in rows:
+                if is_generic_pdf_title(row["title"], row["url"]):
+                    db.execute("""
+                               UPDATE articles
+                               SET title_source = 'auto'
+                               WHERE id = ?
+                               """, (row["id"],))
+
 
         # The FTS table indexes text without storing
         # another full copy of the articles.
@@ -193,7 +232,22 @@ def list_articles():
 @app.post("/api/reading", status_code=201)
 def create_article(article: ArticleCreate):
     url = str(article.url)
-    title = article.title.strip() or fetch_title(url) or urlsplit(url).hostname or url
+    provided_title = article.title.strip()
+    title = (
+            provided_title
+            or (
+                None
+                if urlsplit(url).path.lower().endswith(".pdf")
+                else fetch_title(url)
+            )
+            or urlsplit(url).hostname
+            or url
+    )
+    title_source = (
+        "auto"
+        if not provided_title or is_generic_pdf_title(provided_title, url)
+        else "manual"
+    )
     article_id = str(uuid4())
     saved_at = datetime.now(timezone.utc).isoformat()
 
@@ -201,9 +255,9 @@ def create_article(article: ArticleCreate):
         try:
             db.execute("""
                        INSERT INTO articles
-                           (id, title, url, is_read, saved_at)
-                       VALUES (?, ?, ?, 0, ?)
-                       """, (article_id, title, url, saved_at))
+                           (id, title, url, is_read, saved_at, title_source)
+                       VALUES (?, ?, ?, 0, ?, ?)
+            """, (article_id, title, url, saved_at, title_source))
         except sqlite3.IntegrityError:
             raise HTTPException(
                 status_code=409,
@@ -254,6 +308,7 @@ def update_article(article_id: str, update: ArticleUpdate):
 
         assignments.append("title = ?")
         values.append(update.title.strip())
+        assignments.append("title_source = 'manual'")
 
     values.append(article_id)
 
