@@ -15,6 +15,9 @@
         is_read: boolean;
         saved_at: string;
         archived_at: string | null;
+        index_status: 'pending' | 'processing' | 'ready' | 'failed';
+        indexed_at: string | null;
+        snippet?: string | null;
     };
 
     type Tab = 'queue' | 'archive';
@@ -36,6 +39,11 @@
     let titleDraft = $state('');
     let busyId = $state<string | null>(null);
 
+    let searchResults = $state<Article[]>([]);
+    let searchLoading = $state(false);
+    let searchError = $state('');
+    let searchRevision = $state(0);
+
     const queue = $derived(
         articles.filter(a => a.archived_at === null)
     );
@@ -53,11 +61,9 @@
     );
 
     const filtered = $derived(
-        (tab === 'queue' ? queue : archive).filter(a =>
-            `${a.title} ${hostname(a.url)}`
-                .toLowerCase()
-                .includes(search.toLowerCase().trim())
-        )
+        search.trim()
+            ? searchResults
+            : (tab === 'queue' ? queue : archive)
     );
 
     const visible = $derived(
@@ -65,6 +71,69 @@
             ? filtered
             : filtered.slice(0, 3)
     );
+
+
+    $effect(() => {
+        const query = search.trim();
+        const archived = tab === 'archive';
+        const revision = searchRevision;
+
+        if (!query) {
+            searchResults = [];
+            searchLoading = false;
+            searchError = '';
+            return;
+        }
+
+        const controller = new AbortController();
+
+        searchResults = [];
+        searchLoading = true;
+        searchError = '';
+
+        const timer = setTimeout(async () => {
+            try {
+                const params = new URLSearchParams({
+                    q: query,
+                    archived: String(archived),
+                    revision: String(revision)
+                });
+
+                const response = await fetch(
+                    `/api/reading/search?${params}`,
+                    {
+                        signal: controller.signal,
+                        cache: 'no-store'
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error('Search failed');
+                }
+
+                const results: Article[] = await response.json();
+
+                if (!controller.signal.aborted) {
+                    searchResults = results;
+                }
+
+            } catch {
+                if (!controller.signal.aborted) {
+                    searchResults = [];
+                    searchError = 'Full-text search is unavailable.';
+                }
+            } finally {
+                if (!controller.signal.aborted) {
+                    searchLoading = false;
+                }
+            }
+        }, 250);
+
+        return () => {
+            clearTimeout(timer);
+            controller.abort();
+        };
+    });
 
     function hostname(value: string): string {
         try {
@@ -88,6 +157,7 @@
             if (!response.ok) throw new Error();
 
             articles = await response.json();
+            searchRevision++;
             error = '';
         } catch {
             error = 'Could not load the reading list.';
@@ -195,6 +265,7 @@
             articles = articles.map(a =>
                 a.id === updated.id ? updated : a
             );
+            searchRevision++;
 
             error = '';
             return true;
@@ -252,6 +323,7 @@
             if (!response.ok) throw new Error();
 
             articles = articles.filter(a => a.id !== article.id);
+            searchRevision++;
             error = '';
         } catch {
             error = 'Could not delete the article.';
@@ -341,9 +413,20 @@
     {#if error}
         <p class="error" role="alert">{error}</p>
     {/if}
+    {#if searchError}
+        <p class="error" role="alert">{searchError}</p>
+    {/if}
+
+    {#if searchLoading}
+        <p class="search-status">
+            Searching article contents...
+        </p>
+    {/if}
 
     {#if !loaded}
         <div class="empty">Loading your articles...</div>
+    {:else if search.trim() && searchLoading}
+        <div class="empty">Searching...</div>
     {:else if filtered.length === 0}
         <div class="empty">
             {#if tab === 'archive'}
@@ -418,6 +501,11 @@
                         {/if}
 
                         <small>{hostname(article.url)}</small>
+                        {#if search.trim() && article.snippet}
+                            <small class="article-snippet">
+                                {article.snippet}
+                            </small>
+                        {/if}
                     </div>
 
                     <div class="article-actions">
@@ -778,5 +866,20 @@
         .add-form {
             flex-direction: column;
         }
+    }
+
+    .article-snippet {
+        display: block;
+        margin-top: 9px;
+        max-width: 75ch;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--muted);
+    }
+
+    .search-status {
+        color: var(--muted);
+        font-size: 12px;
+        padding: 12px 0;
     }
 </style>

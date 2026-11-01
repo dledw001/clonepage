@@ -14,3 +14,14 @@ services:
       - "127.0.0.1:8765:80"
     depends_on:
       - api
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "-u", "worker.py"]
+    environment:
+      READING_DB_PATH: /data/reading.sqlite3
+    volumes:
+      - ./data:/data
+    depends_on:
+      - api

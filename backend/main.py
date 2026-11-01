@@ -7,10 +7,12 @@ from pathlib import Path
 from uuid import uuid4
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Query
 from pydantic import BaseModel, Field, HttpUrl
 
 from metadata import fetch_title
+
+import re
 
 DB_PATH = Path(
     os.getenv(
@@ -19,6 +21,10 @@ DB_PATH = Path(
     )
 )
 
+ARTICLE_COLUMNS = (
+    "id, title, url, is_read, saved_at, archived_at, "
+    "index_status, indexed_at"
+)
 
 @contextmanager
 def database():
@@ -33,6 +39,86 @@ def database():
     finally:
         conn.close()
 
+def initialize_search():
+    with database() as db:
+        db.execute("PRAGMA journal_mode=WAL")
+
+        columns = {
+            row["name"]
+            for row in db.execute("PRAGMA table_info(articles)")
+        }
+
+        migrations = {
+            "content": "TEXT",
+            "index_status": "TEXT NOT NULL DEFAULT 'pending'",
+            "index_error": "TEXT",
+            "indexed_at": "TEXT",
+        }
+
+        for name, definition in migrations.items():
+            if name not in columns:
+                db.execute(
+                    f"ALTER TABLE articles ADD COLUMN {name} {definition}"
+                )
+
+        # The FTS table indexes text without storing
+        # another full copy of the articles.
+        exists = db.execute("""
+                            SELECT 1 FROM sqlite_master
+                            WHERE type = 'table' AND name = 'article_fts'
+                            """).fetchone()
+
+        db.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS article_fts
+            USING fts5(
+                title,
+                url,
+                content,
+                content='articles',
+                content_rowid='rowid'
+            )
+        """)
+
+        db.executescript("""
+                         CREATE TRIGGER IF NOT EXISTS articles_fts_insert
+            AFTER INSERT ON articles BEGIN
+                INSERT INTO article_fts(rowid, title, url, content)
+                VALUES(new.rowid, new.title, new.url, new.content);
+                         END;
+
+                         CREATE TRIGGER IF NOT EXISTS articles_fts_delete
+            AFTER DELETE ON articles BEGIN
+                INSERT INTO article_fts(
+                    article_fts, rowid, title, url, content
+                )
+                VALUES(
+                    'delete', old.rowid,
+                    old.title, old.url, old.content
+                );
+                         END;
+
+                         CREATE TRIGGER IF NOT EXISTS articles_fts_update
+            AFTER UPDATE OF title, url, content ON articles BEGIN
+                  INSERT INTO article_fts(
+                             article_fts, rowid, title, url, content
+                         )
+                  VALUES(
+                                                                 'delete', old.rowid,
+                                                                 old.title, old.url, old.content
+                                                                 );
+
+                         INSERT INTO article_fts(rowid, title, url, content)
+                         VALUES(
+                                   new.rowid, new.title, new.url, new.content
+                               );
+                         END;
+                         """)
+
+        if not exists:
+            db.execute("""
+                       INSERT INTO article_fts(article_fts)
+                       VALUES('rebuild')
+                       """)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,6 +147,8 @@ async def lifespan(app: FastAPI):
                        ALTER TABLE articles
                            ADD COLUMN archived_at TEXT DEFAULT NULL
                        """)
+
+    initialize_search()
 
     yield
 
@@ -95,8 +183,8 @@ def serialize(row):
 @app.get("/api/reading")
 def list_articles():
     with database() as db:
-        rows = db.execute("""
-                          SELECT * FROM articles
+        rows = db.execute(f"""
+                          SELECT {ARTICLE_COLUMNS} FROM articles
                           ORDER BY saved_at DESC
                           """).fetchall()
         return [serialize(row) for row in rows]
@@ -123,7 +211,7 @@ def create_article(article: ArticleCreate):
             )
 
         row = db.execute(
-            "SELECT * FROM articles WHERE id = ?",
+            f"SELECT {ARTICLE_COLUMNS} FROM articles WHERE id = ?",
             (article_id,)
         ).fetchone()
 
@@ -180,7 +268,7 @@ def update_article(article_id: str, update: ArticleUpdate):
         )
 
         row = db.execute(
-            "SELECT * FROM articles WHERE id = ?",
+            f"SELECT {ARTICLE_COLUMNS} FROM articles WHERE id = ?",
             (article_id,)
         ).fetchone()
 
@@ -203,3 +291,63 @@ def delete_article(article_id: str):
             raise HTTPException(404, "Article not found")
 
     return Response(status_code=204)
+
+
+@app.get("/api/reading/search")
+def search_articles(
+        q: str = Query(..., min_length=1, max_length=160),
+        archived: bool | None = None,
+        limit: int = Query(50, ge=1, le=100),
+):
+    # Convert user input into safe FTS5 search terms.
+    # Every term must match, regardless of word order.
+    terms = re.findall(r"[^\W_]+", q.lower())[:10]
+
+    if not terms:
+        return []
+
+    # Quoted prefix terms avoid exposing FTS5 operators
+    # directly to the client.
+    match_query = " AND ".join(
+        f'"{term}"*' for term in terms
+    )
+
+    archived_filter = (
+        None if archived is None else int(archived)
+    )
+
+    columns = ", ".join(
+        f"a.{column.strip()}"
+        for column in ARTICLE_COLUMNS.split(",")
+    )
+
+    with database() as db:
+        rows = db.execute(f"""
+            SELECT
+                {columns},
+                snippet(
+                    article_fts,
+                    2,
+                    '',
+                    '',
+                    ' … ',
+                    24
+                ) AS snippet
+            FROM article_fts
+            JOIN articles a
+                ON a.rowid = article_fts.rowid
+            WHERE article_fts MATCH ?
+              AND (
+                  ? IS NULL
+                  OR (a.archived_at IS NOT NULL) = ?
+              )
+            ORDER BY bm25(article_fts, 8.0, 3.0, 1.0)
+            LIMIT ?
+        """, (
+            match_query,
+            archived_filter,
+            archived_filter,
+            limit,
+        )).fetchall()
+
+        return [serialize(row) for row in rows]
