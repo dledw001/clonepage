@@ -226,7 +226,7 @@
           {#each ranges as option}<button class:active={range === option.seconds} aria-pressed={range === option.seconds} title={option.label} onclick={() => range = option.seconds}>{option.short}</button>{/each}
         </div>
       </div>
-      <MetricChart title="CPU utilization" description="How busy your processor has been." series={utilizationSeries} unit="%" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
+      <MetricChart title="CPU Utilization" description="How busy your processor has been." series={utilizationSeries} unit="%" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
                    error={cpuMetric && historyErrors[cpuMetric.key] ? 'CPU history could not be refreshed.' : ''} />
       <div class="temperature-legend" role="group" aria-label="Temperature metrics">
         {#each temperatures as metric, index (metric.key)}
