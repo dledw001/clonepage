@@ -21,6 +21,7 @@ class Reading(BaseModel):
     ts: int = Field(ge=0)
     value: FiniteFloat
     unit: str
+    age_seconds: FiniteFloat = Field(ge=0)
 
 
 class Device(BaseModel):
@@ -35,6 +36,7 @@ class CollectorHealth(BaseModel):
     smart_devices: list[Device] = Field(default_factory=list)
     last_collection_ts: int | None = None
     last_smart_poll_ts: int | None = None
+    collection_age_seconds: FiniteFloat | None = Field(default=None, ge=0)
 
 
 class Snapshot(BaseModel):
@@ -56,6 +58,7 @@ class Series(BaseModel):
     metric: str
     unit: str
     points: list[Point]
+    since_seconds: int | None = None
 
 
 METRICS = TypeAdapter(list[Metric])
@@ -68,6 +71,7 @@ class NasTempsGateway:
         self.clock = clock
         self._snapshot = Snapshot()
         self._snapshot_expires = 0.0
+        self._readings_received_at: float | None = None
         self._snapshot_lock = asyncio.Lock()
         self._series: OrderedDict[tuple, tuple[float, Series]] = OrderedDict()
 
@@ -86,14 +90,29 @@ class NasTempsGateway:
         except (httpx.HTTPStatusError, ValidationError, ValueError) as exc:
             raise HTTPException(502, "NAS Temps returned an invalid response.") from exc
 
+    async def _read_readings(self):
+        readings = await self._read("api/latest", READINGS)
+        return readings, self.clock()
+
+    def _aged_snapshot(self) -> Snapshot:
+        elapsed = max(0, self.clock() - self._readings_received_at) if self._readings_received_at is not None else 0
+        readings = [reading.model_copy(update={"age_seconds": reading.age_seconds + elapsed}) for reading in self._snapshot.readings]
+        health = self._snapshot.health
+        if health is not None:
+            source_now = max((reading.ts + reading.age_seconds for reading in readings), default=None)
+            age = max(0, source_now - health.last_collection_ts) if source_now is not None and health.last_collection_ts is not None else None
+            health = health.model_copy(update={"collection_age_seconds": age})
+        # Return copies: cache hits must not reset or double-count elapsed age.
+        return self._snapshot.model_copy(update={"readings": readings, "health": health})
+
     async def snapshot(self) -> Snapshot:
         async with self._snapshot_lock:
             if self.clock() < self._snapshot_expires:
-                return self._snapshot
+                return self._aged_snapshot()
 
             results = await asyncio.gather(
                 self._read("api/metrics", METRICS),
-                self._read("api/latest", READINGS),
+                self._read_readings(),
                 self._read("api/health", CollectorHealth),
                 return_exceptions=True,
             )
@@ -103,12 +122,14 @@ class NasTempsGateway:
                 if isinstance(result, Exception):
                     errors[name] = result.detail if isinstance(result, HTTPException) else "Could not read NAS Temps."
                 else:
+                    if name == "readings":
+                        result, self._readings_received_at = result
                     values[name] = result
             values["errors"] = errors
             # Keep original reading timestamps when retaining last-known data.
             self._snapshot = Snapshot.model_validate(values)
             self._snapshot_expires = self.clock() + 5
-            return self._snapshot
+            return self._aged_snapshot()
 
     async def series(self, metric: str, since_seconds: int, max_points: int) -> Series:
         key = (metric, since_seconds, max_points)
@@ -124,6 +145,9 @@ class NasTempsGateway:
         })
         if result.metric != metric:
             raise HTTPException(502, "NAS Temps returned history for a different metric.")
+        # Scope the returned buckets to the query, including its partial first
+        # bucket whose start timestamp can precede the requested lookback.
+        result = result.model_copy(update={"since_seconds": since_seconds})
         self._series[key] = (self.clock() + 15, result)
         self._series.move_to_end(key)
         while len(self._series) > 64:

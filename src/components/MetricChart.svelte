@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Activity } from '@lucide/svelte';
-  import { buildPlot, formatValue, type ChartSeries } from '../lib/infrastructure';
+  import { buildPlot, formatValue, nearestPlotPoint, type ChartSeries } from '../lib/infrastructure';
 
   let { title, description, series, unit, start, end, loading = false, error = '' }: {
     title: string; description: string; series: ChartSeries[]; unit: string;
@@ -11,7 +11,7 @@
   const plot = $derived(buildPlot(series, start, end, unit));
   const cursorPosition = $derived(cursor === null ? null : Math.max(0, Math.min(100, (cursor - start) / (end - start) * 100)));
   const hovered = $derived(cursor === null ? [] : plot.paths.flatMap(s => {
-    const point = s.points.reduce<(typeof s.points)[number] | undefined>((best, p) => !best || Math.abs(p.ts - cursor!) < Math.abs(best.ts - cursor!) ? p : best, undefined);
+    const point = nearestPlotPoint(s.points, cursor!, start, end);
     return point ? [{ ...s, point }] : [];
   }));
 
@@ -19,6 +19,10 @@
     return new Date(ts * 1000).toLocaleString(undefined, end - start >= 86400
       ? { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
       : { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function chartValue(value: number | null | undefined) {
+    return formatValue(value, unit) + (value != null && (unit === 'C' || unit === 'F') ? unit : '');
   }
 
   function pointAt(event: PointerEvent) {
@@ -39,12 +43,12 @@
 <section class="chart-card" aria-label={title}>
   <header>
     <div><h2>{title}</h2><p>{description}</p></div>
-    {#if plot.hasData}<span class="peak">PEAK <strong>{formatValue(plot.maximum, unit)}</strong></span>{/if}
+    {#if plot.hasData}<span class="peak">PEAK <strong>{chartValue(plot.maximum)}</strong></span>{/if}
   </header>
   {#if error}<p class="chart-error" role="status">{error}</p>{/if}
   {#if plot.hasData}
     <div class="chart-body">
-      <div class="y-axis" aria-hidden="true">{#each plot.ticks as tick}<span>{Math.round(tick)}{unit === 'C' ? '°' : '%'}</span>{/each}</div>
+      <div class="y-axis" aria-hidden="true">{#each plot.ticks as tick}<span>{Math.round(tick)}{unit === 'C' || unit === 'F' ? `°${unit}` : '%'}</span>{/each}</div>
       <div class="plot-column">
         <div class="plot" role="slider" tabindex="0" aria-label={`${title.endsWith('history') ? title : title + ' history'}. Use arrow keys to explore readings.`}
              aria-valuemin={start} aria-valuemax={end} aria-valuenow={cursor ?? end} aria-valuetext={timeLabel(cursor ?? end)}
@@ -63,8 +67,8 @@
             <div class="chart-tooltip" style:left={`${Math.max(18, Math.min(82, cursorPosition))}%`}>
               <strong>{timeLabel(cursor!)}</strong>
               {#each hovered as item (item.metric)}
-                <div><span class="dot" style:background={item.color}></span><span>{item.label}</span><b>{formatValue(item.point.value, unit)}</b></div>
-                <small>{timeLabel(item.point.ts)} · {formatValue(item.point.min ?? item.point.value, unit)} – {formatValue(item.point.max ?? item.point.value, unit)}</small>
+                <div><span class="dot" style:background={item.color}></span><span>{item.label}</span><b>{chartValue(item.point.value)}</b></div>
+                <small>Bucket from {timeLabel(item.point.ts)} · {chartValue(item.point.min ?? item.point.value)} – {chartValue(item.point.max ?? item.point.value)}</small>
               {/each}
             </div>
           {/if}
@@ -86,7 +90,7 @@
   .peak { white-space: nowrap; font-size: 9px; letter-spacing: 1px; color: var(--muted); }
   .peak strong { display: block; margin-top: 5px; text-align: right; color: var(--text); font-size: 19px; font-weight: 500; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
   .chart-body { display: flex; gap: 12px; }
-  .y-axis { display: flex; flex-direction: column; justify-content: space-between; width: 33px; flex-shrink: 0; height: 180px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+  .y-axis { display: flex; flex-direction: column; justify-content: space-between; width: 40px; flex-shrink: 0; height: 180px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
   .plot-column { min-width: 0; flex: 1; }
   .plot { height: 180px; position: relative; outline-offset: 5px; outline-color: var(--highlight); }
   svg { display: block; width: 100%; height: 100%; overflow: visible; }

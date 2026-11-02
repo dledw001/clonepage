@@ -14,6 +14,7 @@ from nas_temps import NasTempsGateway, router
 class InfrastructureTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.now = 100.0
+        self.health_delay = 0.0
         self.calls = []
         self.responses = {
             "/api/metrics": [{"key": "cpu.usage", "label": "CPU Utilization", "unit": "%"}],
@@ -26,6 +27,8 @@ class InfrastructureTests(unittest.IsolatedAsyncioTestCase):
 
         def upstream(request):
             self.calls.append(request)
+            if request.url.path == "/api/health":
+                self.now += self.health_delay
             value = self.responses[request.url.path]
             if isinstance(value, Exception):
                 raise value
@@ -101,6 +104,48 @@ class InfrastructureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["points"][0], {"ts": 1000, "value": 20, "min": 0, "max": 90, "samples": 4})
         self.assertEqual(dict(self.calls[0].url.params), {"metric": "cpu.usage", "since_seconds": "86400", "max_points": "360"})
+        self.assertEqual(result.json()["since_seconds"], 86400)
+
+    async def test_cached_reading_ages_advance_without_double_counting(self):
+        first = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(first["readings"][0]["age_seconds"], 2)
+        self.now += 3
+        cached = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(cached["readings"][0]["age_seconds"], 5)
+        self.now += 1
+        again = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(again["readings"][0]["age_seconds"], 6)
+        self.assertEqual(again["health"]["collection_age_seconds"], 6)
+        self.assertEqual(len(self.calls), 3)
+
+    async def test_reading_ages_keep_advancing_during_an_upstream_outage(self):
+        await self.client.get("/api/infrastructure/snapshot")
+        self.now += 8
+        self.responses["/api/latest"] = httpx.ConnectError("offline")
+        failed = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(failed["readings"][0]["age_seconds"], 10)
+        self.now += 2
+        cached = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(cached["readings"][0]["age_seconds"], 12)
+        self.assertEqual(cached["readings"][0]["ts"], 1000)
+
+    async def test_other_slow_endpoints_do_not_reset_reading_age(self):
+        self.health_delay = 5
+        result = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(result["readings"][0]["age_seconds"], 7)
+
+    async def test_freshness_uses_source_age_even_with_different_system_clocks(self):
+        self.responses["/api/latest"][0].update(ts=9999999999, age_seconds=42)
+        self.responses["/api/health"]["last_collection_ts"] = 9999999999
+        result = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(result["readings"][0]["age_seconds"], 42)
+        self.assertEqual(result["health"]["collection_age_seconds"], 42)
+
+    async def test_missing_source_age_is_a_validation_error_not_a_fake_fresh_reading(self):
+        del self.responses["/api/latest"][0]["age_seconds"]
+        result = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertIn("readings", result["errors"])
+        self.assertEqual(result["readings"], [])
 
     async def test_series_cache_expires_and_does_not_mix_ranges(self):
         for seconds in (3600, 3600, 86400):

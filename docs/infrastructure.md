@@ -24,15 +24,33 @@ run `npm run dev`. Vite already proxies `/api` to the backend.
 ## Collection and history
 
 - Summary readings refresh every 10 seconds while the page is visible.
-- History refreshes every minute, with 1h, 6h, 24h, and 7d views. Available
+- History refreshes every minute, with 1h, 6h, 24h, 7d, 30d, and 90d views. Available
   history depends on what NAS Temps has actually retained.
 - The server briefly caches snapshot/history requests to share work between
   devices. Original collection timestamps are preserved, including on failure.
+- Freshness starts with NAS Temps' `age_seconds` and advances using monotonic
+  elapsed time in the proxy and browser. Cached or retained readings keep aging;
+  differences between the NAS and viewing device clocks do not reset their age.
 - CPU readings become stale after 60 seconds; SMART drive readings after
   660 seconds, allowing two five-minute SMART polling cycles plus a minute
   of scheduling tolerance.
+- Summary cards show CPU utilization, CPU temperature, average HDD temperature,
+  and average NVMe temperature. Drive averages include only current finite
+  temperature readings and show the number of reporting drives. New NVMe
+  sensors supplied by NAS Temps are included automatically. The displayed age
+  is the age of the oldest reading used in each average; missing/stale readings are excluded.
+- The Celsius/Fahrenheit selector converts all temperature cards, chart axes,
+  bucket averages, min/max envelopes, peaks, and tooltips. Celsius remains the
+  source data unit. The preference is remembered per browser.
 - The history line shows bucket averages; its shaded envelope preserves
   bucket minima and maxima. Collection gaps are not filled with zeroes.
+- A leading partial bucket is retained for the matching requested lookback. Its
+  plot position is clipped to the left edge, while tooltips keep its original
+  bucket-start timestamp. Unrelated lookbacks are not mixed.
+- Collector status, successful-collection freshness, SMART-tool availability,
+  missing device nodes, and stale drive readings are reported separately. A
+  recent SMART poll attempt or an existing device node is not proof of successful
+  temperature collection or drive SMART health.
 - Temperatures have no invented healthy/unhealthy thresholds. Collector
   availability and data freshness are shown separately from sensor values.
 - The dashboard currently covers the metrics supplied by NAS Temps. It does

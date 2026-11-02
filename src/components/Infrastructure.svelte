@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Activity, ArrowUpRight, Cpu, HardDrive, RefreshCw, Thermometer, WifiOff } from '@lucide/svelte';
+  import { Activity, ArrowUpRight, Cpu, HardDrive, RefreshCw, Thermometer, TriangleAlert, WifiOff } from '@lucide/svelte';
   import MetricChart from './MetricChart.svelte';
-  import { ageLabel, fetchJson, formatValue, isStale, metricColors, ranges, readingAge, type ChartSeries, type Metric, type Series, type Snapshot } from '../lib/infrastructure';
+  import { ageLabel, averageDriveTemperature, collectionDiagnostics, convertTemperature, convertTemperatureSeries, fetchJson, formatValue, isStale, metricColors, ranges, readingAge, sourceTime, type TemperatureUnit, type ChartSeries, type Metric, type Series, type Snapshot } from '../lib/infrastructure';
 
   let snapshot = $state<Snapshot | null>(null);
-  let now = $state(Date.now() / 1000);
+  let clock = $state(0);
+  let receivedAt = $state(0);
+  let temperatureUnit = $state<TemperatureUnit>('C');
+  const elapsed = $derived(Math.max(0, clock - receivedAt));
   let refreshing = $state(false);
   let refreshError = $state('');
   let range = $state(3600);
@@ -27,19 +30,20 @@
   const temperatures = $derived(metrics.filter(m => m.unit === 'C'));
   const cpuReading = $derived(readingMap.get(cpuMetric?.key ?? ''));
   const cpuTempReading = $derived(readingMap.get(cpuTempMetric?.key ?? ''));
-  const warmest = $derived(driveMetrics
-    .map(metric => ({ metric, reading: readingMap.get(metric.key) }))
-    .filter(item => !isStale(item.reading, now))
-    .sort((a, b) => b.reading!.value - a.reading!.value)[0]);
+  const hddAverage = $derived(averageDriveTemperature(driveMetrics, readingMap, 'hdd', elapsed));
+  const nvmeAverage = $derived(averageDriveTemperature(driveMetrics, readingMap, 'nvme', elapsed));
   const sourceErrors = $derived(Object.values(snapshot?.errors ?? {}));
-  const collectorStale = $derived(!snapshot?.health?.last_collection_ts || now - snapshot.health.last_collection_ts > 60);
+  const diagnostics = $derived(collectionDiagnostics(snapshot, elapsed));
+  const collectorStale = $derived(snapshot?.health?.collection_age_seconds != null && snapshot.health.collection_age_seconds + elapsed > 60);
+  const notices = $derived([refreshError || (sourceErrors.length ? 'Some readings could not be refreshed. Showing the latest available data.' : ''), ...diagnostics].filter(Boolean));
   const connectionLabel = $derived(refreshError || sourceErrors.length ? 'Connection interrupted'
-    : !snapshot ? 'Connecting' : !snapshot.health?.ok || collectorStale ? 'Readings delayed' : 'Collector online');
+    : !snapshot ? 'Connecting' : snapshot.health?.ok === false ? 'Collector stopped'
+    : collectorStale ? 'Collection delayed' : snapshot.health?.ok ? 'Collector running' : 'Collector status unavailable');
   const metricSignature = $derived(metrics.filter(m => m.unit === 'C' || m.unit === '%').map(m => m.key).sort().join('\n'));
 
   function chartSeries(items: Metric[]): ChartSeries[] {
     return items.filter(m => !hiddenMetrics.includes(m.key) && histories[m.key]).map(metric => ({
-      ...histories[metric.key], label: metric.label,
+      ...(metric.unit === 'C' ? convertTemperatureSeries(histories[metric.key], temperatureUnit) : histories[metric.key]), label: metric.label,
       color: metric.unit === '%' ? 'var(--highlight)' : metricColors[temperatures.findIndex(m => m.key === metric.key) % metricColors.length],
     }));
   }
@@ -55,7 +59,8 @@
       const result = await fetchJson<Snapshot>('/api/infrastructure/snapshot', snapshotController.signal);
       if (!disposed) {
         snapshot = result;
-        now = Date.now() / 1000;
+        receivedAt = performance.now() / 1000;
+        clock = receivedAt;
         refreshError = '';
       }
     } catch {
@@ -65,6 +70,15 @@
     } finally {
       if (!disposed) refreshing = false;
     }
+  }
+
+  function displayTemperature(value: number | null | undefined) {
+    return formatValue(convertTemperature(value, temperatureUnit), temperatureUnit);
+  }
+
+  function setTemperatureUnit(unit: TemperatureUnit) {
+    temperatureUnit = unit;
+    try { localStorage.setItem('clonepage-temperature-unit', unit); } catch { /* Keep the session preference. */ }
   }
 
   function refreshAll() {
@@ -104,7 +118,7 @@
       });
       histories = { ...histories, ...next };
       historyErrors = errors;
-      chartEnd = requestedAt;
+      chartEnd = sourceTime(snapshot, Math.max(0, performance.now() / 1000 - receivedAt)) ?? requestedAt;
       historyLoading = false;
     });
     return () => controller.abort();
@@ -112,18 +126,23 @@
 
   onMount(() => {
     disposed = false;
+    clock = performance.now() / 1000;
+    try {
+      const saved = localStorage.getItem('clonepage-temperature-unit');
+      if (saved === 'C' || saved === 'F') temperatureUnit = saved;
+    } catch { /* The toggle still works when browser storage is unavailable. */ }
     void refreshSnapshot();
     const poll = setInterval(() => { if (!document.hidden) void refreshSnapshot(); }, 10000);
     const historyPoll = setInterval(() => { if (!document.hidden) historyRevision++; }, 60000);
-    const clock = setInterval(() => { if (!document.hidden) now = Date.now() / 1000; }, 1000);
-    const onVisible = () => { if (!document.hidden) refreshAll(); };
+    const ticker = setInterval(() => { if (!document.hidden) clock = performance.now() / 1000; }, 1000);
+    const onVisible = () => { if (!document.hidden) { clock = performance.now() / 1000; refreshAll(); } };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       disposed = true;
       snapshotController?.abort();
       clearInterval(poll);
       clearInterval(historyPoll);
-      clearInterval(clock);
+      clearInterval(ticker);
       document.removeEventListener('visibilitychange', onVisible);
     };
   });
@@ -137,15 +156,21 @@
       <p>CPU activity and temperatures, with a little history.</p>
     </div>
     <div class="collection-actions">
-      <span class="connection" class:delayed={connectionLabel !== 'Collector online'}><i></i>{connectionLabel}</span>
-      <button class="refresh-button" onclick={refreshAll} disabled={refreshing} aria-label="Refresh infrastructure" title="Refresh readings and history">
-        <RefreshCw size={15} class={refreshing ? 'refreshing' : ''} /><span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
-      </button>
+      <span class="connection" class:delayed={connectionLabel !== 'Collector running' || diagnostics.length > 0}><i></i>{connectionLabel}</span>
+      <div class="readout-controls">
+        <div class="unit-options" role="group" aria-label="Temperature unit">
+          <button class:active={temperatureUnit === 'C'} aria-pressed={temperatureUnit === 'C'} onclick={() => setTemperatureUnit('C')} title="Celsius">°C</button>
+          <button class:active={temperatureUnit === 'F'} aria-pressed={temperatureUnit === 'F'} onclick={() => setTemperatureUnit('F')} title="Fahrenheit">°F</button>
+        </div>
+        <button class="refresh-button" onclick={refreshAll} disabled={refreshing} aria-label="Refresh infrastructure" title="Refresh readings and history">
+          <RefreshCw size={15} class={refreshing ? 'refreshing' : ''} /><span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
+        </button>
+      </div>
     </div>
   </header>
 
-  {#if refreshError || sourceErrors.length || snapshot?.health?.ok === false}
-    <div class="source-notice" role="status"><WifiOff size={17} /><span>{refreshError || 'Some readings could not be refreshed. Showing the latest available data.'}</span></div>
+  {#if notices.length}
+    <div class="source-notice" role="status"><TriangleAlert size={17} /><div>{#each notices as notice}<p>{notice}</p>{/each}</div></div>
   {/if}
 
   {#if !refreshing && (refreshError || sourceErrors.length) && (!snapshot || (!snapshot.metrics.length && !snapshot.readings.length))}
@@ -156,19 +181,25 @@
         <div class="card-label"><Cpu size={17} strokeWidth={1.6} /><span>CPU UTILIZATION</span></div>
         <div class="summary-value">{formatValue(cpuReading?.value, '%')}</div>
         <div class="usage-meter" aria-hidden="true"><span style:width={`${Math.max(0, Math.min(100, cpuReading?.value ?? 0))}%`}></span></div>
-        <div class="reading-age" class:stale={isStale(cpuReading, now)}>{cpuReading && isStale(cpuReading, now) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuReading, now))}</div>
+        <div class="reading-age" class:stale={isStale(cpuReading, elapsed)}>{cpuReading && isStale(cpuReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuReading, elapsed))}</div>
       </article>
       <article class="summary-card">
         <div class="card-label"><Thermometer size={17} strokeWidth={1.6} /><span>CPU TEMPERATURE</span></div>
-        <div class="summary-value">{formatValue(cpuTempReading?.value, 'C')}<small>C</small></div>
+        <div class="summary-value">{displayTemperature(cpuTempReading?.value)}<small>{temperatureUnit}</small></div>
         <div class="metric-context">{cpuTempMetric?.label ?? 'Waiting for the collector'}</div>
-        <div class="reading-age" class:stale={isStale(cpuTempReading, now)}>{cpuTempReading && isStale(cpuTempReading, now) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuTempReading, now))}</div>
+        <div class="reading-age" class:stale={isStale(cpuTempReading, elapsed)}>{cpuTempReading && isStale(cpuTempReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuTempReading, elapsed))}</div>
       </article>
-      <article class="summary-card warmest">
-        <div class="card-label"><HardDrive size={17} strokeWidth={1.6} /><span>WARMEST DRIVE</span></div>
-        <div class="summary-value">{formatValue(warmest?.reading?.value, 'C')}<small>C</small></div>
-        <div class="metric-context">{warmest?.metric.label ?? 'Waiting for current drive readings'}</div>
-        <div class="reading-age">{warmest ? ageLabel(readingAge(warmest.reading, now)) : 'No current reading'}</div>
+      <article class="summary-card hdd-average">
+        <div class="card-label"><HardDrive size={17} strokeWidth={1.6} /><span>AVG HDD TEMP</span></div>
+        <div class="summary-value">{displayTemperature(hddAverage.value)}<small>{temperatureUnit}</small></div>
+        <div class="metric-context">{hddAverage.count} of {hddAverage.total} HDD {hddAverage.total === 1 ? 'drive' : 'drives'} reporting</div>
+        <div class="reading-age" class:stale={hddAverage.count < hddAverage.total}>{hddAverage.oldestAge === null ? 'No current readings' : ageLabel(hddAverage.oldestAge)}</div>
+      </article>
+      <article class="summary-card nvme-average">
+        <div class="card-label"><HardDrive size={17} strokeWidth={1.6} /><span>AVG NVME TEMP</span></div>
+        <div class="summary-value">{displayTemperature(nvmeAverage.value)}<small>{temperatureUnit}</small></div>
+        <div class="metric-context">{nvmeAverage.count} of {nvmeAverage.total} NVMe {nvmeAverage.total === 1 ? 'drive' : 'drives'} reporting</div>
+        <div class="reading-age" class:stale={nvmeAverage.count < nvmeAverage.total}>{nvmeAverage.oldestAge === null ? 'No current readings' : ageLabel(nvmeAverage.oldestAge)}</div>
       </article>
     </div>
 
@@ -177,11 +208,11 @@
       <div class="drive-grid">
         {#each driveMetrics as metric (metric.key)}
           {@const reading = readingMap.get(metric.key)}
-          {@const stale = isStale(reading, now)}
+          {@const stale = isStale(reading, elapsed)}
           <article class="drive-card" class:stale>
             <div class="drive-name"><HardDrive size={17} strokeWidth={1.5} /><strong>{metric.label}</strong><span>{metric.key.includes('nvme') ? 'SSD' : 'HDD'}</span></div>
-            <div class="drive-value">{formatValue(reading?.value, 'C')}<small>C</small></div>
-            <small class="reading-age">{reading && stale ? 'Stale · ' : ''}{ageLabel(readingAge(reading, now))}</small>
+            <div class="drive-value">{displayTemperature(reading?.value)}<small>{temperatureUnit}</small></div>
+            <small class="reading-age">{reading && stale ? 'Stale · ' : ''}{ageLabel(readingAge(reading, elapsed))}</small>
           </article>
         {/each}
         {#if !driveMetrics.length}<p class="no-drives">{refreshing ? 'Connecting to NAS Temps...' : 'No drive sensors are available from the collector.'}</p>{/if}
@@ -204,7 +235,7 @@
           </button>
         {/each}
       </div>
-      <MetricChart title="Temperature history" description="Select the sensors above to compare their temperatures." series={temperatureSeries} unit="C" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
+      <MetricChart title="Temperature history" description="Select the sensors above to compare their temperatures." series={temperatureSeries} unit={temperatureUnit} start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
                    error={temperatures.some(m => historyErrors[m.key]) ? 'Some temperature history could not be refreshed.' : ''} />
     </section>
     <div class="infra-footnote"><Activity size={13} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={12} /></a></div>
@@ -219,6 +250,12 @@
   h1 { margin: 17px 0 10px; font-size: 36px; }
   .infra-heading p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
   .collection-actions { display: flex; align-items: center; gap: 16px; padding-bottom: 3px; }
+  .readout-controls { display: flex; align-items: center; gap: 10px; }
+  .unit-options { display: flex; padding: 4px; gap: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+  .unit-options button { padding: 6px 9px; border-radius: 6px; font-size: 11px; background: transparent; }
+  .unit-options button.active { color: var(--text); background: var(--surface-hover); }
+  .source-notice p { margin: 0; }
+  .source-notice p + p { margin-top: 6px; }
   .connection { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
   .connection i { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 8%, transparent); }
   .connection.delayed i { background: var(--warning); box-shadow: none; }
@@ -228,7 +265,7 @@
   .refresh-button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 10px 12px; font-size: 11px; color: var(--text); }
   .source-notice { display: flex; align-items: center; gap: 11px; padding: 14px 17px; margin-bottom: 20px; border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent); border-radius: 12px; color: var(--warning); background: color-mix(in srgb, var(--warning) 5%, transparent); font-size: 12px; line-height: 1.6; }
   .source-notice :global(svg) { flex-shrink: 0; }
-  .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 17px; }
   .summary-card { min-width: 0; padding: 24px 25px 21px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
   .card-label { display: flex; align-items: center; gap: 10px; color: var(--highlight); }
   .card-label span { font-size: 9px; font-weight: 600; letter-spacing: 1.6px; color: var(--muted); }
@@ -239,7 +276,8 @@
   .metric-context { min-height: 16px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
   .reading-age { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
   .reading-age.stale, .drive-card.stale .reading-age { color: var(--warning); }
-  .warmest .card-label { color: var(--chart-2); }
+  .hdd-average .card-label { color: var(--chart-2); }
+  .nvme-average .card-label { color: var(--chart-3); }
   .drives-section { margin-top: 35px; }
   .infra-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; }
   .infra-section-heading h2 { margin: 0; font-size: 9px; font-weight: 600; letter-spacing: 1.8px; color: var(--muted); }
@@ -272,7 +310,9 @@
   .unavailable button { margin-top: 8px; padding: 10px 17px; background: var(--surface-hover); color: var(--text); border-radius: 8px; font-size: 12px; }
   :global(.refreshing) { animation: spin 1.5s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 1000px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 850px) { .infra-heading { align-items: flex-start; flex-direction: column; gap: 22px; } .collection-actions { width: 100%; justify-content: space-between; } .summary-card { padding: 22px 18px; } .card-label { gap: 7px; } .card-label span { font-size: 8px; letter-spacing: 1px; } .summary-value { font-size: 36px; } }
-  @media (max-width: 650px) { .summary-grid { grid-template-columns: 1fr; gap: 12px; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } }
+  @media (max-width: 650px) { .history-heading { flex-direction: column; align-items: stretch; gap: 12px; } .range-options { width: 100%; } .range-options button { flex: 1; min-width: 0; } .summary-grid { grid-template-columns: 1fr; gap: 12px; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } }
   @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .drive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } .infra-footnote a { display: none; } }
+  @media (max-width: 540px) { .collection-actions { flex-direction: column; align-items: flex-start; gap: 14px; } .readout-controls { width: 100%; justify-content: space-between; } }
 </style>
