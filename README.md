@@ -1,5 +1,8 @@
 # Svelte + TS + Vite
 
+Clonepage's NAS Temps integration and deployment settings are documented in
+[docs/infrastructure.md](docs/infrastructure.md).
+
 This template should help get you started developing with Svelte and TypeScript in Vite.
 
 ## Recommended IDE Setup

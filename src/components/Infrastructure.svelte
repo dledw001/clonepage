@@ -1,0 +1,278 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { Activity, ArrowUpRight, Cpu, HardDrive, RefreshCw, Thermometer, WifiOff } from '@lucide/svelte';
+  import MetricChart from './MetricChart.svelte';
+  import { ageLabel, fetchJson, formatValue, isStale, metricColors, ranges, readingAge, type ChartSeries, type Metric, type Series, type Snapshot } from '../lib/infrastructure';
+
+  let snapshot = $state<Snapshot | null>(null);
+  let now = $state(Date.now() / 1000);
+  let refreshing = $state(false);
+  let refreshError = $state('');
+  let range = $state(3600);
+  let histories = $state<Record<string, Series>>({});
+  let historyErrors = $state<Record<string, string>>({});
+  let historyLoading = $state(false);
+  let historyRevision = $state(0);
+  let chartEnd = $state(Date.now() / 1000);
+  let hiddenMetrics = $state<string[]>([]);
+  let snapshotController: AbortController | undefined;
+  let disposed = false;
+  let historyKey = '';
+
+  const metrics = $derived(snapshot?.metrics ?? []);
+  const readingMap = $derived(new Map(snapshot?.readings.map(r => [r.metric, r]) ?? []));
+  const cpuMetric = $derived(metrics.find(m => m.key === 'cpu.usage'));
+  const cpuTempMetric = $derived(metrics.find(m => m.unit === 'C' && !m.key.startsWith('smart.')));
+  const driveMetrics = $derived(metrics.filter(m => m.key.startsWith('smart.') && m.unit === 'C'));
+  const temperatures = $derived(metrics.filter(m => m.unit === 'C'));
+  const cpuReading = $derived(readingMap.get(cpuMetric?.key ?? ''));
+  const cpuTempReading = $derived(readingMap.get(cpuTempMetric?.key ?? ''));
+  const warmest = $derived(driveMetrics
+    .map(metric => ({ metric, reading: readingMap.get(metric.key) }))
+    .filter(item => !isStale(item.reading, now))
+    .sort((a, b) => b.reading!.value - a.reading!.value)[0]);
+  const sourceErrors = $derived(Object.values(snapshot?.errors ?? {}));
+  const collectorStale = $derived(!snapshot?.health?.last_collection_ts || now - snapshot.health.last_collection_ts > 60);
+  const connectionLabel = $derived(refreshError || sourceErrors.length ? 'Connection interrupted'
+    : !snapshot ? 'Connecting' : !snapshot.health?.ok || collectorStale ? 'Readings delayed' : 'Collector online');
+  const metricSignature = $derived(metrics.filter(m => m.unit === 'C' || m.unit === '%').map(m => m.key).sort().join('\n'));
+
+  function chartSeries(items: Metric[]): ChartSeries[] {
+    return items.filter(m => !hiddenMetrics.includes(m.key) && histories[m.key]).map(metric => ({
+      ...histories[metric.key], label: metric.label,
+      color: metric.unit === '%' ? 'var(--highlight)' : metricColors[temperatures.findIndex(m => m.key === metric.key) % metricColors.length],
+    }));
+  }
+
+  const utilizationSeries = $derived(chartSeries(cpuMetric ? [cpuMetric] : []));
+  const temperatureSeries = $derived(chartSeries(temperatures));
+
+  async function refreshSnapshot() {
+    if (refreshing || disposed) return;
+    refreshing = true;
+    snapshotController = new AbortController();
+    try {
+      const result = await fetchJson<Snapshot>('/api/infrastructure/snapshot', snapshotController.signal);
+      if (!disposed) {
+        snapshot = result;
+        now = Date.now() / 1000;
+        refreshError = '';
+      }
+    } catch {
+      if (!disposed) refreshError = snapshot?.readings.length
+        ? 'Could not reach NAS Temps. Your last readings are kept below.'
+        : 'Could not reach NAS Temps. Check the connection and try again.';
+    } finally {
+      if (!disposed) refreshing = false;
+    }
+  }
+
+  function refreshAll() {
+    void refreshSnapshot();
+    historyRevision++;
+  }
+
+  function toggleMetric(key: string) {
+    hiddenMetrics = hiddenMetrics.includes(key) ? hiddenMetrics.filter(k => k !== key) : [...hiddenMetrics, key];
+  }
+
+  $effect(() => {
+    const keys = metricSignature ? metricSignature.split('\n') : [];
+    const seconds = range;
+    const revision = historyRevision;
+    void revision;
+    if (!keys.length) return;
+    const controller = new AbortController();
+    const key = `${metricSignature}:${seconds}`;
+    if (key !== historyKey) {
+      histories = {};
+      historyKey = key;
+    }
+    historyLoading = true;
+    historyErrors = {};
+    const requestedAt = Date.now() / 1000;
+    void Promise.allSettled(keys.map(async metric => {
+      const params = new URLSearchParams({ metric, since_seconds: String(seconds), max_points: '360' });
+      return fetchJson<Series>(`/api/infrastructure/series?${params}`, controller.signal);
+    })).then(results => {
+      if (controller.signal.aborted) return;
+      const next: Record<string, Series> = {};
+      const errors: Record<string, string> = {};
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') next[keys[index]] = result.value;
+        else errors[keys[index]] = 'History could not be refreshed.';
+      });
+      histories = { ...histories, ...next };
+      historyErrors = errors;
+      chartEnd = requestedAt;
+      historyLoading = false;
+    });
+    return () => controller.abort();
+  });
+
+  onMount(() => {
+    disposed = false;
+    void refreshSnapshot();
+    const poll = setInterval(() => { if (!document.hidden) void refreshSnapshot(); }, 10000);
+    const historyPoll = setInterval(() => { if (!document.hidden) historyRevision++; }, 60000);
+    const clock = setInterval(() => { if (!document.hidden) now = Date.now() / 1000; }, 1000);
+    const onVisible = () => { if (!document.hidden) refreshAll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      disposed = true;
+      snapshotController?.abort();
+      clearInterval(poll);
+      clearInterval(historyPoll);
+      clearInterval(clock);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  });
+</script>
+
+<section class="infrastructure">
+  <header class="infra-heading">
+    <div>
+      <div class="infra-eyebrow"><span></span>YOUR INFRASTRUCTURE</div>
+      <h1>Your NAS, at a glance.</h1>
+      <p>CPU activity and temperatures, with a little history.</p>
+    </div>
+    <div class="collection-actions">
+      <span class="connection" class:delayed={connectionLabel !== 'Collector online'}><i></i>{connectionLabel}</span>
+      <button class="refresh-button" onclick={refreshAll} disabled={refreshing} aria-label="Refresh infrastructure" title="Refresh readings and history">
+        <RefreshCw size={15} class={refreshing ? 'refreshing' : ''} /><span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
+      </button>
+    </div>
+  </header>
+
+  {#if refreshError || sourceErrors.length || snapshot?.health?.ok === false}
+    <div class="source-notice" role="status"><WifiOff size={17} /><span>{refreshError || 'Some readings could not be refreshed. Showing the latest available data.'}</span></div>
+  {/if}
+
+  {#if !refreshing && (refreshError || sourceErrors.length) && (!snapshot || (!snapshot.metrics.length && !snapshot.readings.length))}
+    <div class="unavailable"><WifiOff size={30} strokeWidth={1.3} /><h2>The NAS is out of reach.</h2><p>Check the NAS Temps collector and try again.</p><button onclick={refreshAll}>Try again</button></div>
+  {:else}
+    <div class="summary-grid" aria-busy={refreshing && !snapshot}>
+      <article class="summary-card">
+        <div class="card-label"><Cpu size={17} strokeWidth={1.6} /><span>CPU UTILIZATION</span></div>
+        <div class="summary-value">{formatValue(cpuReading?.value, '%')}</div>
+        <div class="usage-meter" aria-hidden="true"><span style:width={`${Math.max(0, Math.min(100, cpuReading?.value ?? 0))}%`}></span></div>
+        <div class="reading-age" class:stale={isStale(cpuReading, now)}>{cpuReading && isStale(cpuReading, now) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuReading, now))}</div>
+      </article>
+      <article class="summary-card">
+        <div class="card-label"><Thermometer size={17} strokeWidth={1.6} /><span>CPU TEMPERATURE</span></div>
+        <div class="summary-value">{formatValue(cpuTempReading?.value, 'C')}<small>C</small></div>
+        <div class="metric-context">{cpuTempMetric?.label ?? 'Waiting for the collector'}</div>
+        <div class="reading-age" class:stale={isStale(cpuTempReading, now)}>{cpuTempReading && isStale(cpuTempReading, now) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuTempReading, now))}</div>
+      </article>
+      <article class="summary-card warmest">
+        <div class="card-label"><HardDrive size={17} strokeWidth={1.6} /><span>WARMEST DRIVE</span></div>
+        <div class="summary-value">{formatValue(warmest?.reading?.value, 'C')}<small>C</small></div>
+        <div class="metric-context">{warmest?.metric.label ?? 'Waiting for current drive readings'}</div>
+        <div class="reading-age">{warmest ? ageLabel(readingAge(warmest.reading, now)) : 'No current reading'}</div>
+      </article>
+    </div>
+
+    <section class="drives-section" aria-label="Drive temperatures">
+      <div class="infra-section-heading"><h2>DRIVE TEMPERATURES</h2><span>{driveMetrics.length ? `${driveMetrics.length} DRIVES` : 'WAITING FOR READINGS'}</span></div>
+      <div class="drive-grid">
+        {#each driveMetrics as metric (metric.key)}
+          {@const reading = readingMap.get(metric.key)}
+          {@const stale = isStale(reading, now)}
+          <article class="drive-card" class:stale>
+            <div class="drive-name"><HardDrive size={17} strokeWidth={1.5} /><strong>{metric.label}</strong><span>{metric.key.includes('nvme') ? 'SSD' : 'HDD'}</span></div>
+            <div class="drive-value">{formatValue(reading?.value, 'C')}<small>C</small></div>
+            <small class="reading-age">{reading && stale ? 'Stale · ' : ''}{ageLabel(readingAge(reading, now))}</small>
+          </article>
+        {/each}
+        {#if !driveMetrics.length}<p class="no-drives">{refreshing ? 'Connecting to NAS Temps...' : 'No drive sensors are available from the collector.'}</p>{/if}
+      </div>
+    </section>
+
+    <section class="history-section" aria-label="Metric history">
+      <div class="history-heading">
+        <div class="infra-section-heading"><h2>A LITTLE PERSPECTIVE</h2><span>{historyLoading ? 'UPDATING HISTORY' : 'METRIC HISTORY'}</span></div>
+        <div class="range-options" role="group" aria-label="History time range">
+          {#each ranges as option}<button class:active={range === option.seconds} aria-pressed={range === option.seconds} title={option.label} onclick={() => range = option.seconds}>{option.short}</button>{/each}
+        </div>
+      </div>
+      <MetricChart title="CPU utilization" description="How busy your processor has been." series={utilizationSeries} unit="%" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
+                   error={cpuMetric && historyErrors[cpuMetric.key] ? 'CPU history could not be refreshed.' : ''} />
+      <div class="temperature-legend" role="group" aria-label="Temperature metrics">
+        {#each temperatures as metric, index (metric.key)}
+          <button class:muted={hiddenMetrics.includes(metric.key)} aria-pressed={!hiddenMetrics.includes(metric.key)} onclick={() => toggleMetric(metric.key)}>
+            <span style:background={metricColors[index % metricColors.length]}></span>{metric.label}
+          </button>
+        {/each}
+      </div>
+      <MetricChart title="Temperature history" description="Select the sensors above to compare their temperatures." series={temperatureSeries} unit="C" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
+                   error={temperatures.some(m => historyErrors[m.key]) ? 'Some temperature history could not be refreshed.' : ''} />
+    </section>
+    <div class="infra-footnote"><Activity size={13} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={12} /></a></div>
+  {/if}
+</section>
+
+<style>
+  .infrastructure { max-width: 1060px; margin: 66px auto 0; padding-bottom: 10px; }
+  .infra-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 33px; }
+  .infra-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 9px; letter-spacing: 2.4px; font-weight: 700; color: var(--highlight); }
+  .infra-eyebrow > span { width: 20px; height: 1px; background: var(--highlight); opacity: .6; }
+  h1 { margin: 17px 0 10px; font-size: 36px; }
+  .infra-heading p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .collection-actions { display: flex; align-items: center; gap: 16px; padding-bottom: 3px; }
+  .connection { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .connection i { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 8%, transparent); }
+  .connection.delayed i { background: var(--warning); box-shadow: none; }
+  button { border: 0; cursor: pointer; color: var(--muted); }
+  button:focus-visible, a:focus-visible { outline: 2px solid var(--highlight); outline-offset: 4px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .refresh-button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 10px 12px; font-size: 11px; color: var(--text); }
+  .source-notice { display: flex; align-items: center; gap: 11px; padding: 14px 17px; margin-bottom: 20px; border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent); border-radius: 12px; color: var(--warning); background: color-mix(in srgb, var(--warning) 5%, transparent); font-size: 12px; line-height: 1.6; }
+  .source-notice :global(svg) { flex-shrink: 0; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; }
+  .summary-card { min-width: 0; padding: 24px 25px 21px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
+  .card-label { display: flex; align-items: center; gap: 10px; color: var(--highlight); }
+  .card-label span { font-size: 9px; font-weight: 600; letter-spacing: 1.6px; color: var(--muted); }
+  .summary-value { font-size: 43px; letter-spacing: -2px; margin: 23px 0 16px; line-height: 1; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .summary-value small { color: var(--muted); font-size: 15px; letter-spacing: 0; margin-left: 3px; }
+  .usage-meter { height: 4px; margin: 5px 0 15px; border-radius: 10px; background: var(--line); overflow: hidden; }
+  .usage-meter span { display: block; height: 100%; background: var(--highlight); border-radius: inherit; transition: width .5s; }
+  .metric-context { min-height: 16px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .reading-age { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .reading-age.stale, .drive-card.stale .reading-age { color: var(--warning); }
+  .warmest .card-label { color: var(--chart-2); }
+  .drives-section { margin-top: 35px; }
+  .infra-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; }
+  .infra-section-heading h2 { margin: 0; font-size: 9px; font-weight: 600; letter-spacing: 1.8px; color: var(--muted); }
+  .infra-section-heading > span { font-size: 9px; letter-spacing: 1px; color: var(--muted); opacity: .75; }
+  .drive-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; }
+  .drive-card { padding: 18px 17px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+  .drive-name { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .drive-name strong { font-size: 11px; font-weight: 500; color: var(--text); }
+  .drive-name > span { margin-left: auto; font-size: 8px; letter-spacing: .6px; opacity: .65; }
+  .drive-value { margin: 19px 0 11px; font-size: 28px; line-height: 1; letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
+  .drive-value small { color: var(--muted); margin-left: 3px; font-size: 11px; }
+  .no-drives { margin: 0; grid-column: 1 / -1; padding: 25px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 12px; }
+  .history-section { margin-top: 39px; }
+  .history-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+  .history-heading .infra-section-heading { margin: 0; flex: 1; }
+  .history-heading .infra-section-heading > span { display: none; }
+  .range-options { display: flex; padding: 4px; gap: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+  .range-options button { padding: 6px 11px; border-radius: 6px; background: transparent; font-size: 10px; font-variant-numeric: tabular-nums; }
+  .range-options button.active { background: var(--surface-hover); color: var(--text); }
+  .temperature-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 26px 0 13px; }
+  .temperature-legend button { display: flex; align-items: center; gap: 7px; padding: 7px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; font-size: 10px; color: var(--text); }
+  .temperature-legend button.muted { opacity: .4; }
+  .temperature-legend span { display: block; width: 6px; height: 6px; border-radius: 50%; }
+  .infra-footnote { display: flex; align-items: center; gap: 7px; margin-top: 20px; color: var(--muted); font-size: 9px; line-height: 1.7; }
+  .infra-footnote :global(svg) { flex-shrink: 0; }
+  .infra-footnote a { display: flex; gap: 4px; align-items: center; margin-left: auto; color: var(--muted); text-decoration: none; white-space: nowrap; }
+  .unavailable { min-height: 370px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); gap: 14px; text-align: center; }
+  .unavailable h2 { margin: 6px 0 0; font-size: 19px; font-weight: 500; color: var(--text); }
+  .unavailable p { margin: 0; font-size: 12px; }
+  .unavailable button { margin-top: 8px; padding: 10px 17px; background: var(--surface-hover); color: var(--text); border-radius: 8px; font-size: 12px; }
+  :global(.refreshing) { animation: spin 1.5s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 850px) { .infra-heading { align-items: flex-start; flex-direction: column; gap: 22px; } .collection-actions { width: 100%; justify-content: space-between; } .summary-card { padding: 22px 18px; } .card-label { gap: 7px; } .card-label span { font-size: 8px; letter-spacing: 1px; } .summary-value { font-size: 36px; } }
+  @media (max-width: 650px) { .summary-grid { grid-template-columns: 1fr; gap: 12px; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } }
+  @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .drive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } .infra-footnote a { display: none; } }
+</style>

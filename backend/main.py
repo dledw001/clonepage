@@ -6,10 +6,12 @@ from pathlib import Path
 from uuid import uuid4
 from urllib.parse import unquote, urlsplit
 
+import httpx
 from fastapi import FastAPI, HTTPException, Response, Query
 from pydantic import BaseModel, Field, HttpUrl
 
 from metadata import fetch_title
+from nas_temps import NasTempsGateway, router as infrastructure_router
 
 import re
 
@@ -198,7 +200,15 @@ async def lifespan(app: FastAPI):
 
     initialize_search()
 
-    yield
+    nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
+    async with httpx.AsyncClient(
+        base_url=nas_url,
+        timeout=httpx.Timeout(5.0, connect=2.0),
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
+        app.state.nas_temps = NasTempsGateway(client)
+        yield
 
 
 app = FastAPI(
@@ -208,6 +218,7 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
 )
+app.include_router(infrastructure_router)
 
 
 class ArticleCreate(BaseModel):

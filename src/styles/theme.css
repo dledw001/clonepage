@@ -30,6 +30,15 @@ button {
     --muted: #939cac;
     --line: rgba(255,255,255,.09);
     --highlight: #b7c7ed;
+    --success: #a9c9b4;
+    --warning: #e2b780;
+    --chart-0: #b7c7ed;
+    --chart-1: #a9c9b4;
+    --chart-2: #e2b780;
+    --chart-3: #c6b4e6;
+    --chart-4: #d4a5ac;
+    --chart-5: #83c5cb;
+    --chart-6: #d4b5a3;
 
     min-height: 100vh;
     position: relative;
@@ -48,6 +57,15 @@ button {
     --muted: #77808b;
     --line: rgba(25,35,50,.11);
     --highlight: #5873a5;
+    --success: #447b5c;
+    --warning: #966327;
+    --chart-0: #5873a5;
+    --chart-1: #447b5c;
+    --chart-2: #a36c25;
+    --chart-3: #8264a5;
+    --chart-4: #a45f70;
+    --chart-5: #347e87;
+    --chart-6: #966c53;
 }
 
 .app::before {
@@ -116,6 +134,37 @@ footer {
 
 .top-actions {
     gap: 24px;
+}
+
+.page-navigation {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+}
+
+.page-navigation a {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 13px;
+    color: var(--muted);
+    border-radius: 7px;
+    text-decoration: none;
+    font-size: 11px;
+    transition: background .2s, color .2s;
+}
+
+.page-navigation a:hover, .page-navigation a.current {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.page-navigation a:focus-visible {
+    outline: 2px solid var(--highlight);
+    outline-offset: 2px;
 }
 
 .top-caption,
@@ -445,6 +494,7 @@ footer {
 }
 
 @media (max-width: 850px) {
+    .top-caption { display: none; }
     .shortcut-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -455,6 +505,9 @@ footer {
 }
 
 @media (max-width: 540px) {
+    .topbar { flex-wrap: wrap; gap: 20px; }
+    .page-navigation { order: 3; width: 100%; justify-content: center; }
+    .page-navigation a { flex: 1; justify-content: center; }
     .page {
         padding: 22px 20px;
     }

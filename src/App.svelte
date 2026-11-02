@@ -1,13 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     ArrowRight, ArrowUpRight, Cloud,
     Command, GitBranch, HardDrive,
     LockKeyhole, Moon, Search, Sun,
-    Terminal, Network
+    Terminal, Network, House, Activity
   } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
+  import Infrastructure from './components/Infrastructure.svelte';
 
   type Action = 'open' | 'copy';
 
@@ -82,9 +83,12 @@
   let selected = $state(0);
   let theme = $state<'dark' | 'light'>('dark');
   let toast = $state('');
+  let page = $state<'home' | 'infrastructure'>(
+    typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' : 'home'
+  );
 
-  let searchInput: HTMLInputElement;
-  let searchRegion: HTMLDivElement;
+  let searchInput = $state<HTMLInputElement>();
+  let searchRegion = $state<HTMLDivElement>();
 
   const matches = $derived(
     query.trim()
@@ -130,8 +134,25 @@
       now = new Date();
     }, 1000);
 
-    return () => clearInterval(interval);
+    const onPopState = () => {
+      page = window.location.pathname.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' : 'home';
+      paletteOpen = false;
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('popstate', onPopState);
+    };
   });
+
+  function navigate(event: MouseEvent, path: string) {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    if (window.location.pathname !== path) window.history.pushState({}, '', path);
+    page = path === '/infrastructure' ? 'infrastructure' : 'home';
+    paletteOpen = false;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
 
   function toggleTheme() {
     theme = theme === 'dark' ? 'light' : 'dark';
@@ -201,17 +222,22 @@
     }
   }
 
-  function handleGlobalKeydown(event: KeyboardEvent) {
+  async function handleGlobalKeydown(event: KeyboardEvent) {
     if ((event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === 'k') {
       event.preventDefault();
-      searchInput.focus();
+      if (page !== 'home') {
+        window.history.pushState({}, '', '/');
+        page = 'home';
+        await tick();
+      }
+      searchInput?.focus();
       paletteOpen = true;
     }
 
     if (event.key === 'Escape') {
       paletteOpen = false;
-      searchInput.blur();
+      searchInput?.blur();
     }
   }
 
@@ -231,10 +257,15 @@
 <div class="app" class:light={theme === 'light'}>
   <div class="page">
     <header class="topbar">
-      <a href="/" class="brand">
+      <a href="/" class="brand" onclick={event => navigate(event, '/')}>
         <span class="brand-mark">✳</span>
         <span>clonepage<span class="brand-dot">.</span></span>
       </a>
+
+      <nav class="page-navigation" aria-label="Main navigation">
+        <a href="/" class:current={page === 'home'} aria-current={page === 'home' ? 'page' : undefined} onclick={event => navigate(event, '/')}><House size={15} strokeWidth={1.7} />Home</a>
+        <a href="/infrastructure" class:current={page === 'infrastructure'} aria-current={page === 'infrastructure' ? 'page' : undefined} onclick={event => navigate(event, '/infrastructure')}><Activity size={15} strokeWidth={1.7} />Infrastructure</a>
+      </nav>
 
       <div class="top-actions">
         <span class="top-caption">YOUR PERSONAL SPACE</span>
@@ -253,6 +284,9 @@
     </header>
 
     <main>
+      {#if page === 'infrastructure'}
+        <Infrastructure />
+      {:else}
       <section class="hero">
         <div class="eyebrow">
           <span class="eyebrow-line"></span>
@@ -353,6 +387,7 @@
         </div>
       </section>
       <ReadingList />
+      {/if}
     </main>
 
     <footer>

@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     environment:
       READING_DB_PATH: /data/reading.sqlite3
+      NAS_TEMPS_URL: ${NAS_TEMPS_URL:-http://10.0.0.149:8888}
     volumes:
       - ./data:/data
 
