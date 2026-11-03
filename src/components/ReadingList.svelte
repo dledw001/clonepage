@@ -636,15 +636,14 @@
             {/each}
         </div>
 
-        {#if tab === 'queue' && !showAll && !search.trim() && filtered.length > 3}
-            <button class="show-all" onclick={() => showAll = true}>
-                View all {filtered.length} articles
-            </button>
-        {:else if tab === 'queue' && showAll && !search.trim() && filtered.length > 3}
-            <button class="show-all" onclick={() => showAll = false}>
-                Show less
-            </button>
-        {/if}
+        <div class="list-footer">
+            <span>{visible.length} of {filtered.length} {filtered.length === 1 ? 'article' : 'articles'}</span>
+            {#if tab === 'queue' && !search.trim() && filtered.length > 3}
+                <button onclick={() => showAll = !showAll}>
+                    {showAll ? 'Show less' : 'Show more'}
+                </button>
+            {/if}
+        </div>
     {/if}
 </section>
 
@@ -911,11 +910,20 @@
         opacity: .7;
     }
 
-    .show-all {
-        display: block;
-        margin: 13px auto 0;
-        padding: 8px;
-        font-size: 12px;
+    .list-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 17px;
+        color: var(--muted);
+        font-size: 10px;
+    }
+
+    .list-footer button {
+        color: var(--highlight);
+        padding: 4px 0;
+        font-size: 11px;
     }
 
     .error {
