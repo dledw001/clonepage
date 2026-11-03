@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from metadata import fetch_title
 from nas_temps import NasTempsGateway, router as infrastructure_router
 from feeds import initialize_feeds, router as feeds_router
+from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_copies, router as saved_copies_router
 
 import re
 
@@ -22,7 +23,7 @@ DB_PATH = Path(
 
 ARTICLE_COLUMNS = (
     "id, title, url, is_read, saved_at, archived_at, "
-    "index_status, indexed_at, index_error, index_attempts, index_retry_at"
+    "index_status, indexed_at, index_error, index_attempts, index_retry_at, " + COPY_COLUMNS
 )
 
 
@@ -202,6 +203,7 @@ async def lifespan(app: FastAPI):
 
     initialize_search()
     initialize_feeds()
+    initialize_saved_copies()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
     async with httpx.AsyncClient(
@@ -223,6 +225,7 @@ app = FastAPI(
 )
 app.include_router(infrastructure_router)
 app.include_router(feeds_router)
+app.include_router(saved_copies_router)
 
 
 class ArticleCreate(BaseModel):
@@ -239,6 +242,8 @@ class ArticleUpdate(BaseModel):
 def serialize(row):
     article = dict(row)
     article["is_read"] = bool(article["is_read"])
+    article["copy_available"] = bool(article.get("copy_saved_at"))
+    article["copy_is_legacy"] = bool(article.get("copy_is_legacy"))
     return article
 
 
@@ -395,6 +400,7 @@ def delete_article(article_id: str):
         if result.rowcount == 0:
             raise HTTPException(404, "Article not found")
 
+    remove_article_copies(article_id)
     return Response(status_code=204)
 
 

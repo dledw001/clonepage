@@ -10,6 +10,7 @@
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
   import Infrastructure from './components/Infrastructure.svelte';
+  import SavedArticle from './components/SavedArticle.svelte';
 
   type Action = 'open' | 'copy';
 
@@ -84,9 +85,15 @@
   let selected = $state(0);
   let theme = $state<'dark' | 'light'>('dark');
   let toast = $state('');
-  let page = $state<'home' | 'infrastructure'>(
-    typeof window !== 'undefined' && window.location.pathname.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' : 'home'
-  );
+  function routeFromPath(path: string) {
+    const reader = /^\/reading\/([A-Za-z0-9_-]{1,80})\/?$/.exec(path);
+    return { page: reader ? 'reader' as const : path.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' as const : 'home' as const, articleId: reader?.[1] ?? '' };
+  }
+  const initialRoute = routeFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
+  let page = $state<'home' | 'infrastructure' | 'reader'>(initialRoute.page);
+  let readerId = $state(initialRoute.articleId);
+
+  function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; }
 
   let searchInput = $state<HTMLInputElement>();
   let searchRegion = $state<HTMLDivElement>();
@@ -136,7 +143,7 @@
     }, 1000);
 
     const onPopState = () => {
-      page = window.location.pathname.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' : 'home';
+      syncRoute();
       paletteOpen = false;
     };
     window.addEventListener('popstate', onPopState);
@@ -150,7 +157,7 @@
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
-    page = path === '/infrastructure' ? 'infrastructure' : 'home';
+    syncRoute();
     paletteOpen = false;
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
@@ -285,7 +292,9 @@
     </header>
 
     <main>
-      {#if page === 'infrastructure'}
+      {#if page === 'reader'}
+        {#key readerId}<SavedArticle articleId={readerId} {theme} />{/key}
+      {:else if page === 'infrastructure'}
         <Infrastructure />
       {:else}
       <section class="hero">

@@ -20,6 +20,14 @@
         index_error: string | null;
         index_attempts: number;
         index_retry_at: string | null;
+        copy_status: 'pending' | 'processing' | 'ready' | 'failed';
+        copy_available: boolean;
+        copy_saved_at: string | null;
+        copy_format: 'html' | 'pdf' | null;
+        copy_error: string | null;
+        copy_warning: string | null;
+        copy_retry_at: string | null;
+        copy_is_legacy: boolean;
         snippet?: string | null;
     };
 
@@ -219,11 +227,16 @@
         document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('focus', onFocus);
         window.addEventListener('clonepage:reading-changed', onFocus);
+        const capturePoll = setInterval(() => {
+            if (!document.hidden && articles.some(article => article.copy_status === 'pending' || article.copy_status === 'processing'
+                || article.copy_retry_at || article.index_status === 'pending' || article.index_status === 'processing' || article.index_retry_at)) void refresh();
+        }, 5000);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisible);
             window.removeEventListener('focus', onFocus);
             window.removeEventListener('clonepage:reading-changed', onFocus);
+            clearInterval(capturePoll);
         };
     });
 
@@ -351,6 +364,25 @@
         await patch(article, {
             is_read: !article.is_read
         });
+    }
+
+    async function retryCopy(article: Article) {
+        if (busyIds.includes(article.id)) return;
+        busyIds = [...busyIds, article.id];
+        beginWrite();
+        try {
+            const response = await fetch(`/api/reading/${article.id}/copy/refresh`, { method: 'POST' });
+            if (!response.ok) throw new Error();
+            const copy = await response.json();
+            articles = articles.map(item => item.id === article.id ? { ...item, ...copy } : item);
+            searchRevision++;
+            error = '';
+        } catch {
+            error = 'Could not request a saved copy. Refresh and try again.';
+        } finally {
+            busyIds = busyIds.filter(id => id !== article.id);
+            finishWrite();
+        }
     }
 
     async function toggleArchive(article: Article) {
@@ -577,6 +609,21 @@
                         {/if}
 
                         <small>{hostname(article.url)}</small>
+                        <div class="saved-copy-actions">
+                            {#if article.copy_available}
+                                <a href={`/reading/${article.id}`} target="_blank" rel="noopener noreferrer">Read saved copy</a>
+                                <a href={`/api/reading/${article.id}/copy/download`}>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
+                            {/if}
+                            {#if article.copy_status === 'pending' || article.copy_status === 'processing'}
+                                <span>{article.copy_available ? 'Refreshing saved copy...' : 'Saving copy...'}</span>
+                            {:else if article.copy_status === 'failed'}
+                                <span class="copy-error" title={article.copy_error ?? undefined}>{article.copy_available ? 'Refresh failed; previous copy kept.' : 'Saved copy unavailable.'}</span>
+                                <button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)}>Retry saved copy</button>
+                            {:else if article.copy_available}
+                                <span title={article.copy_warning ?? undefined}>{article.copy_is_legacy ? 'Recovered text copy' : article.copy_warning ? 'Saved with a note' : 'Copy saved'}{article.copy_saved_at ? ` · ${new Date(article.copy_saved_at).toLocaleDateString()}` : ''}</span>
+                                <button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)} title="Capture a new version; the current copy is kept until it succeeds">Refresh saved copy</button>
+                            {/if}
+                        </div>
                         {#if article.index_status === 'failed'}
                             <small class="index-error" title={article.index_error ?? undefined}>
                                 Content search unavailable.
@@ -919,6 +966,11 @@
         color: var(--muted);
         font-size: 10px;
     }
+
+    .saved-copy-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 13px; margin-top: 8px; font-size: 10px; line-height: 1.6; }
+    .saved-copy-actions a, .saved-copy-actions button { color: var(--highlight); font-size: 10px; font-weight: 400; padding: 0; text-decoration: none; }
+    .saved-copy-actions span { color: var(--muted); }
+    .saved-copy-actions .copy-error { color: var(--warning); }
 
     .list-footer button {
         color: var(--highlight);
