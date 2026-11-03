@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from metadata import fetch_title
 from nas_temps import NasTempsGateway, router as infrastructure_router
+from feeds import initialize_feeds, router as feeds_router
 
 import re
 
@@ -29,6 +30,7 @@ ARTICLE_COLUMNS = (
 def database():
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn
         conn.commit()
@@ -199,6 +201,7 @@ async def lifespan(app: FastAPI):
             db.execute(add_archived_at_sql)
 
     initialize_search()
+    initialize_feeds()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
     async with httpx.AsyncClient(
@@ -219,6 +222,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 app.include_router(infrastructure_router)
+app.include_router(feeds_router)
 
 
 class ArticleCreate(BaseModel):
@@ -252,6 +256,10 @@ def list_articles():
 
 @app.post("/api/reading", status_code=201)
 def create_article(article: ArticleCreate):
+    return save_article(article)
+
+
+def save_article(article: ArticleCreate, return_existing=False):
     url = str(article.url)
     provided_title = article.title.strip()
     title = (
@@ -281,6 +289,10 @@ def create_article(article: ArticleCreate):
                 (article_id, title, url, saved_at, title_source),
             )
         except sqlite3.IntegrityError:
+            if return_existing:
+                existing = db.execute(f"SELECT {ARTICLE_COLUMNS} FROM articles WHERE url=?", (url,)).fetchone()
+                if existing is not None:
+                    return serialize(existing)
             raise HTTPException(status_code=409, detail="Article already saved")
 
         row = db.execute(

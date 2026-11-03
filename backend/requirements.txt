@@ -4,3 +4,4 @@ httpx
 beautifulsoup4
 trafilatura
 pypdf
+feedparser>=6.0.11,<7

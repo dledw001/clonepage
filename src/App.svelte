@@ -8,6 +8,7 @@
   } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
+  import Feeds from './components/Feeds.svelte';
   import Infrastructure from './components/Infrastructure.svelte';
 
   type Action = 'open' | 'copy';
@@ -387,6 +388,7 @@
         </div>
       </section>
       <ReadingList />
+      <Feeds />
       {/if}
     </main>
 

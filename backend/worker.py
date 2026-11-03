@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from main import database
 from extractor import extract_article_text
+from feeds import process_due_feed
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +30,7 @@ def wait_for_schema():
             with database() as db:
                 db.execute(check_index_schema_sql)
                 db.execute("SELECT rowid FROM article_fts LIMIT 0")
+                db.execute("SELECT id FROM feed_subscriptions LIMIT 0")
             return
         except Exception:
             logging.info("Waiting for database initialization...")
@@ -139,6 +141,18 @@ def process_next() -> bool:
     return True
 
 
+def run_cycle() -> bool:
+    worked = False
+    # One task from each queue per cycle: a busy or failing feed cannot starve
+    # saved-article indexing, and a long article queue cannot starve feeds.
+    for task in (process_due_feed, process_next):
+        try:
+            worked = task() or worked
+        except Exception:
+            logging.exception("Unexpected %s error", getattr(task, "__name__", "worker task"))
+    return worked
+
+
 def main():
     wait_for_schema()
 
@@ -152,11 +166,11 @@ def main():
         """
         db.execute(recover_interrupted_jobs_sql)
 
-    logging.info("Clonepage article worker started")
+    logging.info("Clonepage article and feed worker started")
 
     while True:
         try:
-            if not process_next():
+            if not run_cycle():
                 time.sleep(3)
         except Exception:
             logging.exception("Unexpected worker error")

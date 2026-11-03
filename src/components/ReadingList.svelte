@@ -204,6 +204,7 @@
             refreshQueued = false;
             void refresh();
         }
+        if (typeof window !== 'undefined') window.dispatchEvent(new Event('clonepage:reading-changed'));
     }
 
     onMount(() => {
@@ -217,10 +218,12 @@
 
         document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('focus', onFocus);
+        window.addEventListener('clonepage:reading-changed', onFocus);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisible);
             window.removeEventListener('focus', onFocus);
+            window.removeEventListener('clonepage:reading-changed', onFocus);
         };
     });
 

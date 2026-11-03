@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py metadata.py extractor.py worker.py nas_temps.py ./
+COPY main.py metadata.py extractor.py worker.py nas_temps.py feeds.py ./
 
 ENV READING_DB_PATH=/data/reading.sqlite3
 
