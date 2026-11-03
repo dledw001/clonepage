@@ -18,6 +18,157 @@ export type Snapshot = {
 };
 export type ChartSeries = Series & { label: string; color: string };
 
+export type CounterBaseline = Record<string, { ts: number; value: number; latestTs: number; latestValue: number }>;
+export type Drive = {
+  id: string; label: string; kind: 'HDD' | 'NVMe'; present: boolean | null;
+  metrics: Metric[]; readings: Record<string, Reading>;
+};
+export type DriveStatus = {
+  state: 'passed' | 'failed' | 'attention' | 'unknown'; label: string;
+  smartPassed: boolean | null; reasons: string[];
+};
+
+export const driveFields = [
+  { suffix: 'smart_passed', label: 'SMART Self-Assessment', unit: 'bool', history: false, counter: false },
+  { suffix: 'power_on_hours', label: 'Power-On Hours', unit: 'hours', history: true, counter: false },
+  { suffix: 'reallocated_sectors', label: 'Reallocated Sectors', unit: 'count', history: true, counter: true },
+  { suffix: 'pending_sectors', label: 'Pending Sectors', unit: 'count', history: true, counter: false },
+  { suffix: 'uncorrectable_sectors', label: 'Offline Uncorrectable Sectors', unit: 'count', history: true, counter: true },
+  { suffix: 'reported_uncorrectable', label: 'Reported Uncorrectable Errors', unit: 'count', history: true, counter: true },
+  { suffix: 'crc_errors', label: 'Interface CRC Errors', unit: 'count', history: true, counter: true },
+  { suffix: 'endurance_used_percent', label: 'Endurance Used', unit: '%', history: true, counter: false },
+  { suffix: 'available_spare_percent', label: 'Available Spare', unit: '%', history: true, counter: false },
+  { suffix: 'critical_warning', label: 'Critical Warnings', unit: 'bits', history: false, counter: false },
+  { suffix: 'media_errors', label: 'Media Errors', unit: 'count', history: true, counter: true },
+  { suffix: 'unsafe_shutdowns', label: 'Unsafe Shutdowns', unit: 'count', history: true, counter: true },
+  { suffix: 'error_log_entries', label: 'Error Log Entries', unit: 'count', history: true, counter: true },
+  { suffix: 'data_written_tib', label: 'Host Data Written', unit: 'TiB', history: true, counter: false },
+] as const;
+
+export function metricReading(reading: Reading | undefined, unit: string): Reading | undefined {
+  return reading && reading.unit === unit && Number.isFinite(reading.value) && reading.value >= 0 ? reading : undefined;
+}
+
+export function groupDrives(snapshot: Snapshot | null): Drive[] {
+  const drives = new Map<string, Drive>();
+  function ensure(id: string) {
+    if (!drives.has(id)) drives.set(id, { id, label: id, kind: id.startsWith('nvme') ? 'NVMe' : 'HDD', present: null, metrics: [], readings: {} });
+    return drives.get(id)!;
+  }
+  for (const metric of snapshot?.metrics ?? []) {
+    const match = /^smart\.([^.]+)\.(.+)$/.exec(metric.key);
+    if (!match) continue;
+    const drive = ensure(match[1]);
+    drive.metrics.push(metric);
+    if (match[2] === 'temp') drive.label = metric.label;
+  }
+  for (const reading of snapshot?.readings ?? []) {
+    const match = /^smart\.([^.]+)\.(.+)$/.exec(reading.metric);
+    if (match) ensure(match[1]).readings[match[2]] = reading;
+  }
+  for (const device of snapshot?.health?.smart_devices ?? []) {
+    const id = device.device.split('/').at(-1);
+    if (!id) continue;
+    const drive = ensure(id);
+    drive.present = device.present;
+    drive.label = device.label;
+  }
+  return [...drives.values()].sort((a, b) => Number(a.kind === 'NVMe') - Number(b.kind === 'NVMe') || a.id.localeCompare(b.id, undefined, { numeric: true }));
+}
+
+export function driveReading(drive: Drive, suffix: string): Reading | undefined {
+  const field = driveFields.find(field => field.suffix === suffix);
+  const reading = drive.readings[suffix];
+  if (suffix === 'temp') return reading?.unit === 'C' && Number.isFinite(reading.value) ? reading : undefined;
+  if (!field) return undefined;
+  const valid = metricReading(reading, field.unit);
+  if (!valid || (['bool', 'bits', 'count', 'hours'].includes(field.unit) && !Number.isSafeInteger(valid.value))) return undefined;
+  if (field.unit === 'bool' && valid.value !== 0 && valid.value !== 1) return undefined;
+  if (field.unit === 'bits' && valid.value > 255) return undefined;
+  return valid;
+}
+
+// These are page-session baselines, not persisted alerts. Cached samples and
+// counter resets cannot create duplicate or negative increase notifications.
+export function updateCounterBaseline(baseline: CounterBaseline, readings: Reading[]): CounterBaseline {
+  const next = { ...baseline };
+  for (const reading of readings) {
+    const suffix = reading.metric.split('.').at(-1);
+    if (!reading.metric.startsWith('smart.') || !driveFields.some(field => field.suffix === suffix && field.counter)
+      || !metricReading(reading, 'count') || !Number.isSafeInteger(reading.value) || isStale(reading)) continue;
+    const previous = next[reading.metric];
+    if (!previous || (reading.ts > previous.latestTs && reading.value < previous.latestValue)) {
+      next[reading.metric] = { ts: reading.ts, value: reading.value, latestTs: reading.ts, latestValue: reading.value };
+    } else if (reading.ts > previous.latestTs) {
+      next[reading.metric] = { ...previous, latestTs: reading.ts, latestValue: reading.value };
+    }
+  }
+  return next;
+}
+
+export function counterIncrease(reading: Reading | undefined, baseline: CounterBaseline, elapsed = 0): number {
+  if (!reading || isStale(reading, elapsed) || !metricReading(reading, 'count') || !Number.isSafeInteger(reading.value)) return 0;
+  const previous = baseline[reading.metric];
+  return previous && reading.ts > previous.ts && reading.ts >= previous.latestTs ? Math.max(0, reading.value - previous.value) : 0;
+}
+
+export function decodeCriticalWarning(value: number): string[] {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 255) return ['Unrecognized critical warning value'];
+  const descriptions = ['Available spare below its threshold', 'Temperature outside the drive’s limits', 'Drive reliability degraded',
+    'Drive is read-only', 'Volatile memory backup failed', 'Persistent memory is read-only or unreliable'];
+  const warnings = descriptions.flatMap((description, bit) => value & (1 << bit) ? [description] : []);
+  if (value & 0xc0) warnings.push(`Unrecognized warning bits (0x${(value & 0xc0).toString(16).toUpperCase()})`);
+  return warnings;
+}
+
+export function assessDrive(drive: Drive, elapsed = 0, baseline: CounterBaseline = {}, smartAvailable: boolean | null = null): DriveStatus {
+  if (drive.present === false || smartAvailable === false) return {
+    state: 'unknown', label: drive.present === false ? 'Device unavailable' : 'SMART unavailable', smartPassed: null,
+    reasons: [drive.present === false ? 'The collector cannot find this device.' : 'The collector cannot read SMART data.'],
+  };
+  const smart = driveReading(drive, 'smart_passed');
+  const smartPassed = smart && !isStale(smart, elapsed) ? smart.value === 1 : null;
+  if (smartPassed === false) return { state: 'failed', label: 'SMART failed', smartPassed, reasons: ['The drive reports a failed SMART self-assessment.'] };
+  const reasons: string[] = [];
+  for (const field of driveFields) {
+    const reading = driveReading(drive, field.suffix);
+    if (!reading || isStale(reading, elapsed)) continue;
+    if (field.suffix === 'critical_warning') reasons.push(...decodeCriticalWarning(reading.value));
+    else if (['pending_sectors', 'reallocated_sectors', 'uncorrectable_sectors', 'reported_uncorrectable', 'media_errors'].includes(field.suffix) && reading.value > 0) {
+      reasons.push(`${field.label}: ${reading.value.toLocaleString()} recorded.`);
+    } else if (field.suffix === 'endurance_used_percent' && reading.value >= 100) reasons.push('Estimated rated endurance has been consumed.');
+    const increase = counterIncrease(reading, baseline, elapsed);
+    if (increase > 0) reasons.push(`${field.label}: +${increase.toLocaleString()} since this page was opened.`);
+  }
+  const expected = driveFields.filter(field => drive.metrics.some(metric => metric.key === `smart.${drive.id}.${field.suffix}`));
+  const incomplete = expected.some(field => !driveReading(drive, field.suffix) || isStale(driveReading(drive, field.suffix), elapsed));
+  const needsAttention = reasons.length > 0;
+  if (smartPassed === null || incomplete) reasons.push('Some SMART readings are missing, invalid, or stale.');
+  if (needsAttention) return { state: 'attention', label: 'Needs attention', smartPassed, reasons };
+  if (smartPassed === null || incomplete) return { state: 'unknown', label: smart && isStale(smart, elapsed) ? 'SMART stale' : 'SMART unknown', smartPassed, reasons };
+  return { state: 'passed', label: 'SMART passed', smartPassed, reasons: [] };
+}
+
+export function summarizeDrives(statuses: DriveStatus[]) {
+  return { total: statuses.length, passed: statuses.filter(status => status.smartPassed === true).length,
+    failed: statuses.filter(status => status.state === 'failed').length,
+    attention: statuses.filter(status => status.state === 'attention').length,
+    unknown: statuses.filter(status => status.state === 'unknown').length };
+}
+
+export function driveHistoryMetrics(drive: Drive): Metric[] {
+  return driveFields.filter(field => field.history).flatMap(field => {
+    const metric = drive.metrics.find(metric => metric.key === `smart.${drive.id}.${field.suffix}` && metric.unit === field.unit);
+    return metric ? [{ ...metric, label: field.label }] : [];
+  });
+}
+
+export function defaultDriveHistory(drive: Drive): string {
+  const options = driveHistoryMetrics(drive);
+  const preferred = drive.kind === 'NVMe' ? 'endurance_used_percent' : 'pending_sectors';
+  return options.find(metric => metric.key.endsWith(`.${preferred}`))?.key ?? options[0]?.key ?? '';
+}
+
 export const ranges = [
   { label: '1 hour', short: '1h', seconds: 3600 },
   { label: '6 hours', short: '6h', seconds: 21600 },
@@ -107,7 +258,19 @@ export function ageLabel(age: number | null): string {
 
 export function formatValue(value: number | null | undefined, unit: string): string {
   if (value == null || !Number.isFinite(value)) return '—';
+  if (unit === 'bool') return value === 1 ? 'Passed' : value === 0 ? 'Failed' : 'Unknown';
+  if (unit === 'bits') return value === 0 ? 'None' : `0x${value.toString(16).toUpperCase().padStart(2, '0')}`;
+  if (unit === 'count' || unit === 'hours') return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}${unit === 'hours' ? ' h' : ''}`;
+  if (unit === 'GiB' || unit === 'TiB') return `${value.toFixed(1)} ${unit}`;
   return `${value.toFixed(1)}${unit === 'C' || unit === 'F' ? '°' : unit}`;
+}
+
+export function formatAxisValue(value: number, unit: string): string {
+  const number = value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  if (unit === 'C' || unit === 'F') return `${number}°${unit}`;
+  if (unit === '%') return `${number}%`;
+  if (unit === 'count') return number;
+  return `${number} ${unit === 'hours' ? 'h' : unit}`;
 }
 
 export async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -150,8 +313,11 @@ export function buildPlot(series: ChartSeries[], start: number, end: number, uni
   const minimum = values.length ? Math.min(...values) : 0;
   const maximum = values.length ? Math.max(...values) : 100;
   const padding = Math.max(2, (maximum - minimum) * 0.15);
-  const lower = unit === '%' ? 0 : Math.floor((minimum - padding) / 5) * 5;
-  const upper = unit === '%' ? 100 : Math.ceil((maximum + padding) / 5) * 5;
+  const temperature = unit === 'C' || unit === 'F';
+  const step = temperature ? 5 : Math.max(unit === 'count' || unit === 'hours' ? 1 : 0.1, 10 ** Math.floor(Math.log10(Math.max(1, maximum - minimum))) / 2);
+  const numericPadding = temperature ? padding : Math.max(step, (maximum - minimum) * .15);
+  const lower = unit === '%' ? 0 : Math.max(temperature ? -Infinity : 0, Math.floor((minimum - numericPadding) / step) * step);
+  const upper = unit === '%' ? Math.max(100, Math.ceil(maximum / 10) * 10) : Math.ceil((maximum + numericPadding) / step) * step;
   const x = (ts: number) => Math.max(0, Math.min(width, (ts - start) / Math.max(1, end - start) * width));
   const y = (value: number) => height - (value - lower) / Math.max(1, upper - lower) * height;
   const paths = prepared.map(item => {

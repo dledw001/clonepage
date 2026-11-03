@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Activity } from '@lucide/svelte';
-  import { buildPlot, formatValue, nearestPlotPoint, type ChartSeries } from '../lib/infrastructure';
+  import { buildPlot, formatAxisValue, formatValue, nearestPlotPoint, type ChartSeries } from '../lib/infrastructure';
 
-  let { title, description, series, unit, start, end, loading = false, error = '' }: {
+  let { title, description, series, unit, start, end, loading = false, error = '', compact = false }: {
     title: string; description: string; series: ChartSeries[]; unit: string;
-    start: number; end: number; loading?: boolean; error?: string;
+    start: number; end: number; loading?: boolean; error?: string; compact?: boolean;
   } = $props();
 
   let cursor = $state<number | null>(null);
@@ -40,7 +40,7 @@
   }
 </script>
 
-<section class="chart-card" aria-label={title}>
+<section class="chart-card" class:compact aria-label={title}>
   <header>
     <div><h2>{title}</h2><p>{description}</p></div>
     {#if plot.hasData}<span class="peak">PEAK <strong>{chartValue(plot.maximum)}</strong></span>{/if}
@@ -48,7 +48,7 @@
   {#if error}<p class="chart-error" role="status">{error}</p>{/if}
   {#if plot.hasData}
     <div class="chart-body">
-      <div class="y-axis" aria-hidden="true">{#each plot.ticks as tick}<span>{Math.round(tick)}{unit === 'C' || unit === 'F' ? `°${unit}` : '%'}</span>{/each}</div>
+      <div class="y-axis" aria-hidden="true">{#each plot.ticks as tick}<span>{formatAxisValue(tick, unit)}</span>{/each}</div>
       <div class="plot-column">
         <div class="plot" role="slider" tabindex="0" aria-label={`${title.endsWith('history') ? title : title + ' history'}. Use arrow keys to explore readings.`}
              aria-valuemin={start} aria-valuemax={end} aria-valuenow={cursor ?? end} aria-valuetext={timeLabel(cursor ?? end)}
@@ -84,13 +84,16 @@
 
 <style>
   .chart-card { min-width: 0; padding: 25px 26px 19px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  .chart-card.compact { padding: 16px 12px; border-radius: 10px; background: var(--bg); }
+  .compact header { flex-wrap: wrap; gap: 10px; }
+  .compact .chart-hint { display: none; }
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 27px; }
   h2 { margin: 0; font-size: 14px; font-weight: 600; }
   p { margin: 7px 0 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
   .peak { white-space: nowrap; font-size: 9px; letter-spacing: 1px; color: var(--muted); }
   .peak strong { display: block; margin-top: 5px; text-align: right; color: var(--text); font-size: 19px; font-weight: 500; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
   .chart-body { display: flex; gap: 12px; }
-  .y-axis { display: flex; flex-direction: column; justify-content: space-between; width: 40px; flex-shrink: 0; height: 180px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+  .y-axis { display: flex; flex-direction: column; justify-content: space-between; width: 54px; flex-shrink: 0; height: 180px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
   .plot-column { min-width: 0; flex: 1; }
   .plot { height: 180px; position: relative; outline-offset: 5px; outline-color: var(--highlight); }
   svg { display: block; width: 100%; height: 100%; overflow: visible; }

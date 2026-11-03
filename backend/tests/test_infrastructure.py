@@ -63,6 +63,19 @@ class InfrastructureTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.calls), 6)
         self.assertEqual(result.json()["readings"][0]["value"], 34)
 
+    async def test_snapshot_passes_through_ram_and_smart_units_and_zero_values(self):
+        values = [("memory.used_percent", "%", 32.2), ("memory.used_gib", "GiB", 10.1),
+                  ("swap.used_gib", "GiB", 0), ("smart.nvme0.smart_passed", "bool", 1),
+                  ("smart.nvme0.critical_warning", "bits", 0), ("smart.nvme0.media_errors", "count", 0),
+                  ("smart.nvme0.data_written_tib", "TiB", 47.137), ("smart.nvme0.power_on_hours", "hours", 23397)]
+        self.responses["/api/metrics"] = [{"key": key, "label": key, "unit": unit} for key, unit, _ in values]
+        self.responses["/api/latest"] = [{"metric": key, "value": value, "unit": unit, "ts": 1000, "age_seconds": 2}
+                                         for key, unit, value in values]
+        result = (await self.client.get("/api/infrastructure/snapshot")).json()
+        self.assertEqual(result["errors"], {})
+        self.assertEqual(len(result["metrics"]), len(values))
+        self.assertEqual([(reading["metric"], reading["unit"], reading["value"]) for reading in result["readings"]], values)
+
     async def test_outage_preserves_last_readings_and_original_timestamps(self):
         await self.client.get("/api/infrastructure/snapshot")
         self.now += 6

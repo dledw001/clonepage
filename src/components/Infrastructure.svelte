@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Activity, ArrowUpRight, Cpu, HardDrive, RefreshCw, Thermometer, TriangleAlert, WifiOff } from '@lucide/svelte';
+  import { Activity, ArrowUpRight, Cpu, HardDrive, MemoryStick, RefreshCw, ShieldCheck, Thermometer, TriangleAlert, WifiOff } from '@lucide/svelte';
   import MetricChart from './MetricChart.svelte';
-  import { ageLabel, averageDriveTemperature, collectionDiagnostics, convertTemperature, convertTemperatureSeries, fetchJson, formatValue, isStale, metricColors, ranges, readingAge, sourceTime, type TemperatureUnit, type ChartSeries, type Metric, type Series, type Snapshot } from '../lib/infrastructure';
+  import DriveCard from './DriveCard.svelte';
+  import { ageLabel, assessDrive, averageDriveTemperature, collectionDiagnostics, convertTemperature, convertTemperatureSeries, defaultDriveHistory, driveHistoryMetrics,
+    fetchJson, formatValue, groupDrives, isStale, metricColors, metricReading, ranges, readingAge, sourceTime, summarizeDrives, updateCounterBaseline,
+    type CounterBaseline, type Drive, type TemperatureUnit, type ChartSeries, type Metric, type Series, type Snapshot } from '../lib/infrastructure';
 
   let snapshot = $state<Snapshot | null>(null);
   let clock = $state(0);
@@ -18,6 +21,9 @@
   let historyRevision = $state(0);
   let chartEnd = $state(Date.now() / 1000);
   let hiddenMetrics = $state<string[]>([]);
+  let openDrives = $state<string[]>([]);
+  let driveSelections = $state<Record<string, string>>({});
+  let counterBaseline = $state<CounterBaseline>({});
   let snapshotController: AbortController | undefined;
   let disposed = false;
   let historyKey = '';
@@ -25,11 +31,26 @@
   const metrics = $derived(snapshot?.metrics ?? []);
   const readingMap = $derived(new Map(snapshot?.readings.map(r => [r.metric, r]) ?? []));
   const cpuMetric = $derived(metrics.find(m => m.key === 'cpu.usage'));
+  const ramMetric = $derived(metrics.find(m => m.key === 'memory.used_percent' && m.unit === '%'));
   const cpuTempMetric = $derived(metrics.find(m => m.unit === 'C' && !m.key.startsWith('smart.')));
   const driveMetrics = $derived(metrics.filter(m => m.key.startsWith('smart.') && m.unit === 'C'));
   const temperatures = $derived(metrics.filter(m => m.unit === 'C'));
   const cpuReading = $derived(readingMap.get(cpuMetric?.key ?? ''));
   const cpuTempReading = $derived(readingMap.get(cpuTempMetric?.key ?? ''));
+  const ramReading = $derived(metricReading(readingMap.get('memory.used_percent'), '%'));
+  const ramDetails = $derived([
+    { label: 'Used', reading: metricReading(readingMap.get('memory.used_gib'), 'GiB') },
+    { label: 'Available', reading: metricReading(readingMap.get('memory.available_gib'), 'GiB') },
+    { label: 'Swap', reading: metricReading(readingMap.get('swap.used_gib'), 'GiB') },
+  ]);
+  const drives = $derived(groupDrives(snapshot));
+  const driveStatuses = $derived(drives.map(drive => assessDrive(drive, elapsed, counterBaseline, snapshot?.health?.smartctl_available)));
+  const driveSummary = $derived(summarizeDrives(driveStatuses));
+  const driveSummaryDetails = $derived([
+    driveSummary.failed ? `${driveSummary.failed} failed` : '',
+    driveSummary.attention ? `${driveSummary.attention} need attention` : '',
+    driveSummary.unknown ? `${driveSummary.unknown} unknown/unavailable` : '',
+  ].filter(Boolean).join(' · ') || (drives.length ? 'Current readings from all drives' : 'Waiting for SMART readings'));
   const hddAverage = $derived(averageDriveTemperature(driveMetrics, readingMap, 'hdd', elapsed));
   const nvmeAverage = $derived(averageDriveTemperature(driveMetrics, readingMap, 'nvme', elapsed));
   const sourceErrors = $derived(Object.values(snapshot?.errors ?? {}));
@@ -39,7 +60,21 @@
   const connectionLabel = $derived(refreshError || sourceErrors.length ? 'Connection interrupted'
     : !snapshot ? 'Connecting' : snapshot.health?.ok === false ? 'Collector stopped'
     : collectorStale ? 'Collection delayed' : snapshot.health?.ok ? 'Collector running' : 'Collector status unavailable');
-  const metricSignature = $derived(metrics.filter(m => m.unit === 'C' || m.unit === '%').map(m => m.key).sort().join('\n'));
+  // Fetch only visible charts; spare/endurance percentages are not CPU or RAM.
+  const metricSignature = $derived([...new Set([
+    ...temperatures.map(metric => metric.key),
+    ...(cpuMetric ? [cpuMetric.key] : []), ...(ramMetric ? [ramMetric.key] : []),
+    ...drives.filter(drive => openDrives.includes(drive.id)).map(selectedDriveHistory).filter(Boolean),
+  ])].sort().join('\n'));
+
+  function selectedDriveHistory(drive: Drive): string {
+    const selected = driveSelections[drive.id];
+    return driveHistoryMetrics(drive).some(metric => metric.key === selected) ? selected : defaultDriveHistory(drive);
+  }
+
+  function setDriveOpen(id: string, open: boolean) {
+    openDrives = open ? [...new Set([...openDrives, id])] : openDrives.filter(key => key !== id);
+  }
 
   function chartSeries(items: Metric[]): ChartSeries[] {
     return items.filter(m => !hiddenMetrics.includes(m.key) && histories[m.key]).map(metric => ({
@@ -49,6 +84,7 @@
   }
 
   const utilizationSeries = $derived(chartSeries(cpuMetric ? [cpuMetric] : []));
+  const ramSeries = $derived(chartSeries(ramMetric ? [ramMetric] : []));
   const temperatureSeries = $derived(chartSeries(temperatures));
 
   async function refreshSnapshot() {
@@ -58,6 +94,7 @@
     try {
       const result = await fetchJson<Snapshot>('/api/infrastructure/snapshot', snapshotController.signal);
       if (!disposed) {
+        counterBaseline = updateCounterBaseline(counterBaseline, result.readings);
         snapshot = result;
         receivedAt = performance.now() / 1000;
         clock = receivedAt;
@@ -97,7 +134,7 @@
     void revision;
     if (!keys.length) return;
     const controller = new AbortController();
-    const key = `${metricSignature}:${seconds}`;
+    const key = String(seconds);
     if (key !== historyKey) {
       histories = {};
       historyKey = key;
@@ -153,7 +190,7 @@
     <div>
       <div class="infra-eyebrow"><span></span>YOUR INFRASTRUCTURE</div>
       <h1>Your NAS, at a glance.</h1>
-      <p>CPU activity and temperatures, with a little history.</p>
+      <p>CPU, memory, and drive health, with a little history.</p>
     </div>
     <div class="collection-actions">
       <span class="connection" class:delayed={connectionLabel !== 'Collector running' || diagnostics.length > 0}><i></i>{connectionLabel}</span>
@@ -183,6 +220,13 @@
         <div class="usage-meter" aria-hidden="true"><span style:width={`${Math.max(0, Math.min(100, cpuReading?.value ?? 0))}%`}></span></div>
         <div class="reading-age" class:stale={isStale(cpuReading, elapsed)}>{cpuReading && isStale(cpuReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuReading, elapsed))}</div>
       </article>
+      <article class="summary-card ram-card">
+        <div class="card-label"><MemoryStick size={17} strokeWidth={1.6} /><span>RAM UTILIZATION</span></div>
+        <div class="summary-value">{formatValue(ramReading?.value, '%')}</div>
+        <div class="usage-meter" aria-hidden="true"><span style:width={`${Math.max(0, Math.min(100, ramReading?.value ?? 0))}%`}></span></div>
+        <div class="ram-details">{#each ramDetails as detail}<span class:stale={isStale(detail.reading, elapsed)}>{detail.label} <b>{formatValue(detail.reading?.value, 'GiB')}</b>{#if detail.reading && isStale(detail.reading, elapsed)} (stale){/if}</span>{/each}</div>
+        <div class="reading-age" class:stale={isStale(ramReading, elapsed)}>{ramReading && isStale(ramReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(ramReading, elapsed))}</div>
+      </article>
       <article class="summary-card">
         <div class="card-label"><Thermometer size={17} strokeWidth={1.6} /><span>CPU TEMPERATURE</span></div>
         <div class="summary-value">{displayTemperature(cpuTempReading?.value)}<small>{temperatureUnit}</small></div>
@@ -201,21 +245,24 @@
         <div class="metric-context">{nvmeAverage.count} of {nvmeAverage.total} NVMe {nvmeAverage.total === 1 ? 'drive' : 'drives'} reporting</div>
         <div class="reading-age" class:stale={nvmeAverage.count < nvmeAverage.total}>{nvmeAverage.oldestAge === null ? 'No current readings' : ageLabel(nvmeAverage.oldestAge)}</div>
       </article>
+      <article class="summary-card drive-summary">
+        <div class="card-label"><ShieldCheck size={17} strokeWidth={1.6} /><span>DRIVE STATUS</span></div>
+        <div class="summary-value">{driveSummary.total ? `${driveSummary.passed}/${driveSummary.total}` : '—'}<small>SMART passed</small></div>
+        <div class="metric-context" class:stale={driveSummary.failed + driveSummary.attention + driveSummary.unknown > 0}>{driveSummaryDetails}</div>
+        <div class="reading-age">SMART self-assessment · see details below</div>
+      </article>
     </div>
 
-    <section class="drives-section" aria-label="Drive temperatures">
-      <div class="infra-section-heading"><h2>DRIVE TEMPERATURES</h2><span>{driveMetrics.length ? `${driveMetrics.length} DRIVES` : 'WAITING FOR READINGS'}</span></div>
+    <section class="drives-section" aria-label="Drives">
+      <div class="infra-section-heading"><h2>DRIVES</h2><span>{drives.length ? `${drives.length} DRIVES` : 'WAITING FOR READINGS'}</span></div>
       <div class="drive-grid">
-        {#each driveMetrics as metric (metric.key)}
-          {@const reading = readingMap.get(metric.key)}
-          {@const stale = isStale(reading, elapsed)}
-          <article class="drive-card" class:stale>
-            <div class="drive-name"><HardDrive size={17} strokeWidth={1.5} /><strong>{metric.label}</strong><span>{metric.key.includes('nvme') ? 'SSD' : 'HDD'}</span></div>
-            <div class="drive-value">{displayTemperature(reading?.value)}<small>{temperatureUnit}</small></div>
-            <small class="reading-age">{reading && stale ? 'Stale · ' : ''}{ageLabel(readingAge(reading, elapsed))}</small>
-          </article>
+        {#each drives as drive, index (drive.id)}
+          {@const selected = selectedDriveHistory(drive)}
+          <DriveCard {drive} status={driveStatuses[index]} {elapsed} {temperatureUnit} baseline={counterBaseline}
+                     historyMetric={selected} history={histories[selected]} historyError={historyErrors[selected]} {historyLoading} start={chartEnd - range} end={chartEnd}
+                     onOpen={open => setDriveOpen(drive.id, open)} onMetric={key => driveSelections = { ...driveSelections, [drive.id]: key }} />
         {/each}
-        {#if !driveMetrics.length}<p class="no-drives">{refreshing ? 'Connecting to NAS Temps...' : 'No drive sensors are available from the collector.'}</p>{/if}
+        {#if !drives.length}<p class="no-drives">{refreshing ? 'Connecting to NAS Temps...' : 'No drive sensors are available from the collector.'}</p>{/if}
       </div>
     </section>
 
@@ -226,8 +273,12 @@
           {#each ranges as option}<button class:active={range === option.seconds} aria-pressed={range === option.seconds} title={option.label} onclick={() => range = option.seconds}>{option.short}</button>{/each}
         </div>
       </div>
-      <MetricChart title="CPU Utilization" description="How busy your processor has been." series={utilizationSeries} unit="%" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
+      <div class="resource-history">
+        <MetricChart title="CPU Utilization" description="How busy your processor has been." series={utilizationSeries} unit="%" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
                    error={cpuMetric && historyErrors[cpuMetric.key] ? 'CPU history could not be refreshed.' : ''} />
+        <MetricChart title="RAM Utilization" description="Memory utilization over time." series={ramSeries} unit="%" start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
+                     error={ramMetric && historyErrors[ramMetric.key] ? 'RAM history could not be refreshed.' : ''} />
+      </div>
       <div class="temperature-legend" role="group" aria-label="Temperature metrics">
         {#each temperatures as metric, index (metric.key)}
           <button class:muted={hiddenMetrics.includes(metric.key)} aria-pressed={!hiddenMetrics.includes(metric.key)} onclick={() => toggleMetric(metric.key)}>
@@ -265,7 +316,7 @@
   .refresh-button { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); padding: 10px 12px; font-size: 11px; color: var(--text); }
   .source-notice { display: flex; align-items: center; gap: 11px; padding: 14px 17px; margin-bottom: 20px; border: 1px solid color-mix(in srgb, var(--warning) 25%, transparent); border-radius: 12px; color: var(--warning); background: color-mix(in srgb, var(--warning) 5%, transparent); font-size: 12px; line-height: 1.6; }
   .source-notice :global(svg) { flex-shrink: 0; }
-  .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 17px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; }
   .summary-card { min-width: 0; padding: 24px 25px 21px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface); }
   .card-label { display: flex; align-items: center; gap: 10px; color: var(--highlight); }
   .card-label span { font-size: 9px; font-weight: 600; letter-spacing: 1.6px; color: var(--muted); }
@@ -275,22 +326,21 @@
   .usage-meter span { display: block; height: 100%; background: var(--highlight); border-radius: inherit; transition: width .5s; }
   .metric-context { min-height: 16px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
   .reading-age { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-  .reading-age.stale, .drive-card.stale .reading-age { color: var(--warning); }
+  .stale { color: var(--warning); }
+  .ram-details { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--muted); font-size: 10px; line-height: 1.6; margin-bottom: 10px; }
+  .ram-details b { font-weight: 500; color: var(--text); }
+  .ram-details .stale b { color: var(--warning); }
+  .drive-summary .summary-value small { display: inline-block; font-size: 12px; margin-left: 10px; letter-spacing: 0; }
   .hdd-average .card-label { color: var(--chart-2); }
   .nvme-average .card-label { color: var(--chart-3); }
   .drives-section { margin-top: 35px; }
   .infra-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 16px; }
   .infra-section-heading h2 { margin: 0; font-size: 9px; font-weight: 600; letter-spacing: 1.8px; color: var(--muted); }
   .infra-section-heading > span { font-size: 9px; letter-spacing: 1px; color: var(--muted); opacity: .75; }
-  .drive-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; }
-  .drive-card { padding: 18px 17px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
-  .drive-name { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-  .drive-name strong { font-size: 11px; font-weight: 500; color: var(--text); }
-  .drive-name > span { margin-left: auto; font-size: 8px; letter-spacing: .6px; opacity: .65; }
-  .drive-value { margin: 19px 0 11px; font-size: 28px; line-height: 1; letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
-  .drive-value small { color: var(--muted); margin-left: 3px; font-size: 11px; }
+  .drive-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
   .no-drives { margin: 0; grid-column: 1 / -1; padding: 25px; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 12px; }
   .history-section { margin-top: 39px; }
+  .resource-history { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; }
   .history-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
   .history-heading .infra-section-heading { margin: 0; flex: 1; }
   .history-heading .infra-section-heading > span { display: none; }
@@ -310,9 +360,9 @@
   .unavailable button { margin-top: 8px; padding: 10px 17px; background: var(--surface-hover); color: var(--text); border-radius: 8px; font-size: 12px; }
   :global(.refreshing) { animation: spin 1.5s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (max-width: 1000px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 1000px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-history { grid-template-columns: 1fr; } }
   @media (max-width: 850px) { .infra-heading { align-items: flex-start; flex-direction: column; gap: 22px; } .collection-actions { width: 100%; justify-content: space-between; } .summary-card { padding: 22px 18px; } .card-label { gap: 7px; } .card-label span { font-size: 8px; letter-spacing: 1px; } .summary-value { font-size: 36px; } }
-  @media (max-width: 650px) { .history-heading { flex-direction: column; align-items: stretch; gap: 12px; } .range-options { width: 100%; } .range-options button { flex: 1; min-width: 0; } .summary-grid { grid-template-columns: 1fr; gap: 12px; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } }
-  @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .drive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } .infra-footnote a { display: none; } }
+  @media (max-width: 650px) { .history-heading { flex-direction: column; align-items: stretch; gap: 12px; } .range-options { width: 100%; } .range-options button { flex: 1; min-width: 0; } .summary-grid { grid-template-columns: 1fr; gap: 12px; } .drive-grid { grid-template-columns: 1fr; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } .ram-details { grid-column: 1 / -1; margin-top: 10px; } .ram-card .reading-age { grid-row: 4; } .drive-summary .summary-value small { display: block; text-align: right; margin: 6px 0 0; font-size: 10px; } }
+  @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } .infra-footnote a { display: none; } }
   @media (max-width: 540px) { .collection-actions { flex-direction: column; align-items: flex-start; gap: 14px; } .readout-controls { width: 100%; justify-content: space-between; } }
 </style>
