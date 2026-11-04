@@ -11,6 +11,7 @@
   import Feeds from './components/Feeds.svelte';
   import Infrastructure from './components/Infrastructure.svelte';
   import SavedArticle from './components/SavedArticle.svelte';
+  import { PageNavigation, isPlainClick, webSearchUrl } from './lib/navigation';
 
   type Action = 'open' | 'copy';
 
@@ -92,6 +93,13 @@
   const initialRoute = routeFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
   let page = $state<'home' | 'infrastructure' | 'reader'>(initialRoute.page);
   let readerId = $state(initialRoute.articleId);
+  let homeVisited = $state(initialRoute.page === 'home');
+  const navigation = typeof window === 'undefined' ? undefined : new PageNavigation(window, async () => {
+    syncRoute();
+    if (page === 'home') homeVisited = true;
+    paletteOpen = false;
+    await tick();
+  });
 
   function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; }
 
@@ -142,25 +150,26 @@
       now = new Date();
     }, 1000);
 
-    const onPopState = () => {
-      syncRoute();
-      paletteOpen = false;
-    };
-    window.addEventListener('popstate', onPopState);
+    const stopNavigation = navigation?.start();
     return () => {
       clearInterval(interval);
-      window.removeEventListener('popstate', onPopState);
+      stopNavigation?.();
     };
   });
 
   function navigate(event: MouseEvent, path: string) {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    if (!isPlainClick(event)) return;
     event.preventDefault();
-    if (window.location.pathname !== path) window.history.pushState({}, '', path);
-    syncRoute();
-    paletteOpen = false;
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    void navigation?.go(path);
   }
+
+  function backToList(event: MouseEvent) {
+    if (!isPlainClick(event)) return;
+    event.preventDefault();
+    navigation?.backToList();
+  }
+
+  function closePalette() { paletteOpen = false; query = ''; }
 
   function toggleTheme() {
     theme = theme === 'dark' ? 'light' : 'dark';
@@ -200,14 +209,7 @@
     const text = query.trim();
     if (!text) return;
 
-    // Recognize URLs, domains, and local addresses.
-    const isUrl = /^(https?:\/\/|localhost(?::\d+)?(?:\/|$)|(?:[\w-]+\.)+[\w-]{2,}(?::\d+)?(?:\/|$))/i.test(text);
-
-    const url = isUrl
-      ? (/^https?:\/\//i.test(text) ? text : `https://${text}`)
-      : `https://www.google.com/search?q=${encodeURIComponent(text)}`;
-
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.location.assign(webSearchUrl(text));
     paletteOpen = false;
     query = '';
   }
@@ -235,9 +237,7 @@
         event.key.toLowerCase() === 'k') {
       event.preventDefault();
       if (page !== 'home') {
-        window.history.pushState({}, '', '/');
-        page = 'home';
-        await tick();
+        await navigation?.go('/');
       }
       searchInput?.focus();
       paletteOpen = true;
@@ -293,10 +293,12 @@
 
     <main>
       {#if page === 'reader'}
-        {#key readerId}<SavedArticle articleId={readerId} {theme} />{/key}
+        {#key readerId}<SavedArticle articleId={readerId} {theme} onback={backToList} />{/key}
       {:else if page === 'infrastructure'}
         <Infrastructure />
-      {:else}
+      {/if}
+      {#if homeVisited}
+      <div hidden={page !== 'home'}>
       <section class="hero">
         <div class="eyebrow">
           <span class="eyebrow-line"></span>
@@ -334,30 +336,33 @@
                 {query.trim() ? 'MATCHING COMMANDS' : 'QUICK ACTIONS'}
               </div>
 
+              {#snippet resultContent(command: CommandItem)}
+                <span class="result-icon"><command.icon size={19} strokeWidth={1.7} /></span>
+                <span class="result-text"><strong>{command.name}</strong><small>{command.description}</small></span>
+                <ArrowRight size={16} />
+              {/snippet}
               {#each matches as command, index (command.id)}
+                {#if command.action === 'open' && command.value}
+                  <a class="result" class:selected={selected === index} href={command.value} target="_blank" rel="noopener noreferrer"
+                    onmouseenter={() => selected = index} onclick={closePalette}>{@render resultContent(command)}</a>
+                {:else}
                 <button
                   class="result"
                   class:selected={selected === index}
                   onmouseenter={() => selected = index}
                   onclick={() => execute(command)}
                 >
-                  <span class="result-icon">
-                    <command.icon size={19} strokeWidth={1.7} />
-                  </span>
-                  <span class="result-text">
-                    <strong>{command.name}</strong>
-                    <small>{command.description}</small>
-                  </span>
-                  <ArrowRight size={16} />
+                  {@render resultContent(command)}
                 </button>
+                {/if}
               {/each}
 
               {#if query.trim()}
-                <button class="web-result" onclick={searchWeb}>
+                <a class="web-result" href={webSearchUrl(query)}>
                   <Search size={17} />
                   <span>Search the web for "{query}"</span>
-                  <ArrowUpRight size={16} />
-                </button>
+                  <ArrowRight size={16} />
+                </a>
               {/if}
             </div>
           {/if}
@@ -379,25 +384,28 @@
         </div>
 
         <div class="shortcut-grid">
+          {#snippet shortcutContent(command: CommandItem)}
+            <span class="shortcut-icon"><command.icon size={21} strokeWidth={1.65} /></span>
+            <span class="shortcut-bottom"><span class="shortcut-name">{command.name}</span><ArrowUpRight size={14} class="shortcut-arrow" /></span>
+          {/snippet}
           {#each commands as command (command.id)}
+            {#if command.action === 'open' && command.value}
+              <a class="shortcut-card" style={`--accent:${command.color}`} href={command.value} target="_blank" rel="noopener noreferrer">{@render shortcutContent(command)}</a>
+            {:else}
             <button
               class="shortcut-card"
               style={`--accent:${command.color}`}
               onclick={() => execute(command)}
             >
-              <span class="shortcut-icon">
-                <command.icon size={21} strokeWidth={1.65} />
-              </span>
-              <span class="shortcut-bottom">
-                <span class="shortcut-name">{command.name}</span>
-                <ArrowUpRight size={14} class="shortcut-arrow" />
-              </span>
+              {@render shortcutContent(command)}
             </button>
+            {/if}
           {/each}
         </div>
       </section>
-      <ReadingList />
-      <Feeds />
+      <ReadingList active={page === 'home'} onnavigate={navigate} />
+      <Feeds active={page === 'home'} />
+      </div>
       {/if}
     </main>
 

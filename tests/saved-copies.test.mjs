@@ -12,7 +12,7 @@ const body = declarations + `\nreturn { refresh, retryCopy, seed(value){articles
 const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2023 } }).outputText;
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const article = { id: 'a', title: 'A saved article', url: 'https://example.com/a', is_read: true, archived_at: '2026-01-01', copy_status: 'ready', copy_available: true };
-const create = fetch => new Function('fetch', '$state', '$derived', js)(fetch, value => value, value => value);
+const create = fetch => new Function('fetch', '$state', '$derived', '$props', js)(fetch, value => value, value => value, () => ({}));
 const deferred = () => { let resolve; const promise = new Promise(yes => resolve = yes); return { promise, resolve }; };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 

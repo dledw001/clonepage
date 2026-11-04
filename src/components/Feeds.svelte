@@ -3,6 +3,10 @@
   import { ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, Plus, RefreshCw, Rss, Search, Settings2, Trash2, X } from '@lucide/svelte';
   import { FeedReader, type ReaderState, type Discovery, type FeedPreview } from '../lib/feed-reader';
 
+  let { active = true }: { active?: boolean } = $props();
+  let refreshOnReturn = false;
+  $effect(() => { if (active && refreshOnReturn) { refreshOnReturn = false; void reader.refresh(); } });
+
   let readerState = $state<ReaderState>({ data: null, loading: false, busy: [], expanded: false, error: '', notice: '' });
   const reader = new FeedReader(next => readerState = next, (...args) => fetch(...args),
     () => window.dispatchEvent(new Event('clonepage:reading-changed')));
@@ -31,10 +35,10 @@
   onMount(() => {
     void reader.refresh();
     const refreshVisible = () => {
-      if (!document.hidden && (!readerState.expanded || subscriptions.some(feed => feed.refresh_pending))) void reader.refresh();
+      if (active && !document.hidden && (!readerState.expanded || subscriptions.some(feed => feed.refresh_pending))) void reader.refresh();
     };
     const timer = setInterval(refreshVisible, 5000);
-    const readingChanged = () => void reader.refresh();
+    const readingChanged = () => { if (active) void reader.refresh(); else refreshOnReturn = true; };
     document.addEventListener('visibilitychange', refreshVisible);
     window.addEventListener('focus', refreshVisible);
     window.addEventListener('clonepage:reading-changed', readingChanged);
@@ -121,7 +125,7 @@
   {#if managing}
     <div class="subscriptions" aria-label="Subscriptions">
       {#each subscriptions as feed}
-        <div class="subscription"><div><strong>{feed.title}</strong><a href={feed.url} target="_blank" rel="noopener noreferrer">{feed.url}</a><small>{feed.refresh_pending ? 'Refresh pending · ' : ''}Last updated: {dateLabel(feed.last_success_at)}</small>{#if feed.error}<small class="error">{feed.error} Existing stories are kept; collection will retry.</small>{/if}</div>
+        <div class="subscription"><div><strong>{feed.title}</strong><details><summary>Feed details</summary><a href={feed.url} target="_blank" rel="noopener noreferrer">Open RSS/Atom feed</a><small>{feed.url}</small></details><small>{feed.refresh_pending ? 'Refresh pending · ' : ''}Last updated: {dateLabel(feed.last_success_at)}</small>{#if feed.error}<small class="error">{feed.error} Existing stories are kept; collection will retry.</small>{/if}</div>
           <button class="icon-action" disabled={readerState.busy.includes(`unsubscribe:${feed.id}`)} onclick={() => unsubscribe(feed.id, feed.title)} aria-label={`Unsubscribe from ${feed.title}`} title="Unsubscribe"><Trash2 size={17} /></button>
         </div>
       {:else}<p class="status">No subscriptions yet. Add a feed to get started.</p>{/each}
@@ -195,6 +199,8 @@
   .subscription > div { min-width: 0; }
   .subscription strong { font-size: 12px; font-weight: 500; }
   .subscription a, .subscription small { display: block; font-size: 10px; color: var(--muted); margin-top: 7px; overflow-wrap: anywhere; line-height: 1.6; }
+  .subscription details { margin-top: 7px; font-size: 10px; color: var(--muted); }
+  .subscription summary { cursor: pointer; }
   .retention, .status { font-size: 11px; line-height: 1.7; color: var(--muted); }
   .retention { margin-bottom: 0; }
   .error { color: var(--warning) !important; font-size: 12px; line-height: 1.7; }

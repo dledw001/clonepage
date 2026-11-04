@@ -8,6 +8,8 @@
         Trash2, X
     } from '@lucide/svelte';
 
+    let { active = true, onnavigate }: { active?: boolean; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
+
     type Article = {
         id: string;
         title: string;
@@ -215,27 +217,31 @@
         if (typeof window !== 'undefined') window.dispatchEvent(new Event('clonepage:reading-changed'));
     }
 
+    let refreshOnReturn = false;
+    $effect(() => { if (active && refreshOnReturn) { refreshOnReturn = false; void refresh(); } });
+
     onMount(() => {
         void refresh();
 
         const onVisible = () => {
-            if (!document.hidden) void refresh();
+            if (active && !document.hidden) void refresh();
         };
 
-        const onFocus = () => void refresh();
+        const onFocus = () => { if (active && !document.hidden) void refresh(); };
+        const onChanged = () => { if (active) void refresh(); else refreshOnReturn = true; };
 
         document.addEventListener('visibilitychange', onVisible);
         window.addEventListener('focus', onFocus);
-        window.addEventListener('clonepage:reading-changed', onFocus);
+        window.addEventListener('clonepage:reading-changed', onChanged);
         const capturePoll = setInterval(() => {
-            if (!document.hidden && articles.some(article => article.copy_status === 'pending' || article.copy_status === 'processing'
+            if (active && !document.hidden && articles.some(article => article.copy_status === 'pending' || article.copy_status === 'processing'
                 || article.copy_retry_at || article.index_status === 'pending' || article.index_status === 'processing' || article.index_retry_at)) void refresh();
         }, 5000);
 
         return () => {
             document.removeEventListener('visibilitychange', onVisible);
             window.removeEventListener('focus', onFocus);
-            window.removeEventListener('clonepage:reading-changed', onFocus);
+            window.removeEventListener('clonepage:reading-changed', onChanged);
             clearInterval(capturePoll);
         };
     });
@@ -611,7 +617,7 @@
                         <small>{hostname(article.url)}</small>
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
-                                <a href={`/reading/${article.id}`} target="_blank" rel="noopener noreferrer">Read saved copy</a>
+                                <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>Read saved copy</a>
                                 <a href={`/api/reading/${article.id}/copy/download`}>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
                             {/if}
                             {#if article.copy_status === 'pending' || article.copy_status === 'processing'}

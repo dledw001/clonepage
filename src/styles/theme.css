@@ -318,6 +318,9 @@ kbd {
     color: var(--muted);
 }
 
+a.result, a.web-result, a.shortcut-card { text-decoration: none; }
+.result:focus-visible, .web-result:focus-visible, .shortcut-card:focus-visible { outline: 2px solid var(--highlight); outline-offset: 3px; }
+
 .result,
 .web-result {
     display: flex;

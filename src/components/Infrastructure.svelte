@@ -289,7 +289,7 @@
       <MetricChart title="Temperature history" description="Select the sensors above to compare their temperatures." series={temperatureSeries} unit={temperatureUnit} start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
                    error={temperatures.some(m => historyErrors[m.key]) ? 'Some temperature history could not be refreshed.' : ''} />
     </section>
-    <div class="infra-footnote"><Activity size={13} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={12} /></a></div>
+    <div class="infra-footnote"><Activity size={13} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><details><summary>Details</summary><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={12} /></a></details></div>
   {/if}
 </section>
 
@@ -353,6 +353,9 @@
   .temperature-legend span { display: block; width: 6px; height: 6px; border-radius: 50%; }
   .infra-footnote { display: flex; align-items: center; gap: 7px; margin-top: 20px; color: var(--muted); font-size: 9px; line-height: 1.7; }
   .infra-footnote :global(svg) { flex-shrink: 0; }
+  .infra-footnote details { margin-left: auto; }
+  .infra-footnote summary { cursor: pointer; }
+  .infra-footnote details[open] a { margin-top: 10px; }
   .infra-footnote a { display: flex; gap: 4px; align-items: center; margin-left: auto; color: var(--muted); text-decoration: none; white-space: nowrap; }
   .unavailable { min-height: 370px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); gap: 14px; text-align: center; }
   .unavailable h2 { margin: 6px 0 0; font-size: 19px; font-weight: 500; color: var(--text); }
@@ -363,6 +366,6 @@
   @media (max-width: 1000px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-history { grid-template-columns: 1fr; } }
   @media (max-width: 850px) { .infra-heading { align-items: flex-start; flex-direction: column; gap: 22px; } .collection-actions { width: 100%; justify-content: space-between; } .summary-card { padding: 22px 18px; } .card-label { gap: 7px; } .card-label span { font-size: 8px; letter-spacing: 1px; } .summary-value { font-size: 36px; } }
   @media (max-width: 650px) { .history-heading { flex-direction: column; align-items: stretch; gap: 12px; } .range-options { width: 100%; } .range-options button { flex: 1; min-width: 0; } .summary-grid { grid-template-columns: 1fr; gap: 12px; } .drive-grid { grid-template-columns: 1fr; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } .ram-details { grid-column: 1 / -1; margin-top: 10px; } .ram-card .reading-age { grid-row: 4; } .drive-summary .summary-value small { display: block; text-align: right; margin: 6px 0 0; font-size: 10px; } }
-  @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } .infra-footnote a { display: none; } }
+  @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } }
   @media (max-width: 540px) { .collection-actions { flex-direction: column; align-items: flex-start; gap: 14px; } .readout-controls { width: 100%; justify-content: space-between; } }
 </style>

@@ -25,7 +25,7 @@ const javascript = ts.transpileModule(body + expose, {
 }).outputText;
 
 function createComponent(fetch) {
-    return new Function('fetch', 'confirm', '$state', '$derived', javascript)(fetch, () => true, value => value, value => value);
+    return new Function('fetch', 'confirm', '$state', '$derived', '$props', javascript)(fetch, () => true, value => value, value => value, () => ({}));
 }
 
 function deferred() {

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { ArrowLeft, ArrowUpRight, Download, RefreshCw } from '@lucide/svelte';
 
-  let { articleId, theme }: { articleId: string; theme: 'light' | 'dark' } = $props();
+  let { articleId, theme, onback }: { articleId: string; theme: 'light' | 'dark'; onback?: (event: MouseEvent) => void } = $props();
   type SavedCopy = { id: string; title: string; url: string; copy_available: boolean; copy_status: string;
     copy_saved_at: string | null; copy_format: 'html' | 'pdf' | null; copy_size: number | null;
     copy_error: string | null; copy_warning: string | null; copy_retry_at: string | null };
@@ -85,7 +85,7 @@
 </script>
 
 <section class="saved-article">
-  <a class="back" href="/"><ArrowLeft size={15} />Back to reading list</a>
+  <a class="back" href="/" onclick={onback}><ArrowLeft size={15} />Back to reading list</a>
   <header><div class="eyebrow">YOUR SAVED COPY</div><h1>{info?.title ?? 'Saved article'}</h1>
     {#if info?.copy_available}<p>Captured {info.copy_saved_at ? new Date(info.copy_saved_at).toLocaleString() : ''} · {info.copy_format === 'pdf' ? 'Original PDF' : 'Readable HTML'}{info.copy_size ? ` · ${fileSize(info.copy_size)}` : ''}</p>{/if}
     {#if info}<div class="actions">
