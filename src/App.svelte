@@ -4,7 +4,7 @@
     ArrowRight, ArrowUpRight, Cloud,
     Command, GitBranch, HardDrive,
     LockKeyhole, Moon, Search, Sun,
-    Terminal, Network, House, Activity
+    Terminal, Network, House, Activity, HardDriveDownload
   } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
@@ -24,7 +24,7 @@
       icon: HardDrive,
       color: '#a4b9e4',
       action: 'open' as Action,
-      value: '' // Add your NAS URL
+      value: 'https://dsm.dledwith.com'
     },
     {
       id: 'vault',
@@ -35,6 +35,16 @@
       color: '#a9c9b4',
       action: 'open' as Action,
       value: 'https://vault.dledwith.com' // Add your Vaultwarden URL
+    },
+    {
+      id: 'qbit',
+      name: 'qBittorrent',
+      description: 'Torrent client',
+      aliases: ['qbit', 'qbittorrent', 'bittorrent', 'torrent'],
+      icon: HardDriveDownload,
+      color: '#8fb4df',
+      action: 'open' as Action,
+      value: 'https://qbit.dledwith.com'
     },
     {
       id: 'github',
