@@ -1,6 +1,7 @@
 import os
+import asyncio
 import sqlite3
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -16,6 +17,8 @@ from feeds import initialize_feeds, router as feeds_router
 from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_copies, router as saved_copies_router
 
 from shortcuts import initialize_shortcuts, router as shortcuts_router
+from dsm import DSMSessions, router as dsm_router
+from dsm_services import initialize_services
 
 import re
 
@@ -207,6 +210,8 @@ async def lifespan(app: FastAPI):
     initialize_feeds()
     initialize_saved_copies()
     initialize_shortcuts()
+    initialize_services()
+    app.state.dsm_sessions = DSMSessions()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
     async with httpx.AsyncClient(
@@ -216,7 +221,19 @@ async def lifespan(app: FastAPI):
         trust_env=False,
     ) as client:
         app.state.nas_temps = NasTempsGateway(client)
-        yield
+        async def reap_dsm_sessions():
+            while True:
+                await asyncio.sleep(15)
+                await app.state.dsm_sessions.cleanup()
+
+        reaper = asyncio.create_task(reap_dsm_sessions())
+        try:
+            yield
+        finally:
+            reaper.cancel()
+            with suppress(asyncio.CancelledError):
+                await reaper
+            await app.state.dsm_sessions.shutdown()
 
 
 app = FastAPI(
@@ -230,6 +247,17 @@ app.include_router(infrastructure_router)
 app.include_router(feeds_router)
 app.include_router(saved_copies_router)
 app.include_router(shortcuts_router)
+app.include_router(dsm_router)
+
+
+@app.middleware("http")
+async def protect_dsm_responses(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/dsm/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "same-origin"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 class ArticleCreate(BaseModel):

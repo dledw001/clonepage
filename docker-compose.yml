@@ -5,6 +5,10 @@ services:
     environment:
       READING_DB_PATH: /data/reading.sqlite3
       NAS_TEMPS_URL: ${NAS_TEMPS_URL:-http://10.0.0.149:8888}
+      CLONEPAGE_ORIGIN: ${CLONEPAGE_ORIGIN:-https://clonepage.dledwith.com}
+      DSM_URL: ${DSM_URL:-https://dsm.dledwith.com}
+      DSM_SERVICE_DOMAIN: ${DSM_SERVICE_DOMAIN:-dledwith.com}
+      DSM_UPSTREAM_HOSTS: ${DSM_UPSTREAM_HOSTS:-10.0.0.149,127.0.0.1,localhost}
     volumes:
       - ./data:/data
 

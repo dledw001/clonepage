@@ -99,5 +99,10 @@ export class ShortcutStore {
     }
     return saved;
   }
+  accept(snapshot: ShortcutSnapshot) {
+    if (this.disposed || snapshot.revision < this.state.revision) return;
+    ++this.sequence;
+    this.update({ ...snapshot, loaded: true, loading: false, error: '', conflict: false });
+  }
   dispose() { this.disposed = true; ++this.sequence; this.controller.abort(); }
 }

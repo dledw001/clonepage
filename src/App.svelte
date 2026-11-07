@@ -319,7 +319,7 @@
         </p>
       </section>
 
-      <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} />
+      <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} active={page === 'home'} />
       <ReadingList active={page === 'home'} onnavigate={navigate} />
       <Feeds active={page === 'home'} />
       </div>

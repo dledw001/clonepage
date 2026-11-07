@@ -2,11 +2,14 @@
   import { onDestroy, tick } from 'svelte';
   import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
+  import ServiceSetup from './ServiceSetup.svelte';
   import { ShortcutDrag } from '../lib/shortcut-drag';
   import type { Shortcut, ShortcutDraft, ShortcutState, ShortcutStore } from '../lib/shortcuts';
 
-  let { data, store, onexecute }: { data: ShortcutState; store: ShortcutStore; onexecute: (item: Shortcut) => void } = $props();
+  let { data, store, onexecute, active = true }: { data: ShortcutState; store: ShortcutStore; onexecute: (item: Shortcut) => void; active?: boolean } = $props();
   let managing = $state(false);
+  let serviceOpen = $state(false);
+  $effect(() => { if (!active) serviceOpen = false; });
   let editorOpen = $state(false);
   let editingId = $state<string | null>(null);
   let draftRevision = 0;
@@ -58,7 +61,7 @@
   }
 
   function startDrag(event: PointerEvent, item: Shortcut) {
-    if (event.button !== 0 || !event.isPrimary || data.busy || editorOpen || gesture) return;
+    if (event.button !== 0 || !event.isPrimary || data.busy || editorOpen || serviceOpen || gesture) return;
     const handle = event.currentTarget as HTMLButtonElement;
     const card = handle.closest<HTMLElement>('[data-shortcut-id]');
     if (!card) return;
@@ -95,7 +98,7 @@
     if (event.key === 'Escape' && gesture) { event.preventDefault(); cancelDrag(); dragNotice = 'Reordering cancelled.'; }
   }
   function handleKey(event: KeyboardEvent, item: Shortcut) {
-    if (gesture || data.busy || editorOpen) return;
+    if (gesture || data.busy || editorOpen || serviceOpen) return;
     if (['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
       void store.move(item.id, event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1);
@@ -152,7 +155,7 @@
           <article class="shortcut-card sortable-card" data-shortcut-id={item.id} style={`--accent:${item.color}`} class:drag-source={drag?.active && drag.id === item.id}
             class:drop-before={drag?.active && drag.slot === index} class:drop-after={drag?.active && drag.slot === data.items.length && index === data.items.length - 1}>
             {@render card(item)}
-            <button class="drag-handle" aria-label={`Drag to reorder ${item.name}`} title="Drag to reorder; arrow keys also move this shortcut" disabled={data.busy || editorOpen}
+            <button class="drag-handle" aria-label={`Drag to reorder ${item.name}`} title="Drag to reorder; arrow keys also move this shortcut" disabled={data.busy || editorOpen || serviceOpen}
               onpointerdown={event => startDrag(event, item)} onlostpointercapture={cancelPointer} onkeydown={event => handleKey(event, item)} onclick={event => event.preventDefault()}><GripVertical size={19} /></button>
           </article>
         {:else if item.action === 'open'}<a class="shortcut-card" style={`--accent:${item.color}`} href={item.value} target="_blank" rel="noopener noreferrer" title={item.description || item.name}>{@render card(item)}</a>
@@ -166,7 +169,7 @@
   <div class="section-header">
     <span>YOUR PLACES</span>
     <div class="shortcut-heading-actions"><span class="section-count">{data.loaded ? String(data.items.length).padStart(2, '0') : '—'} SHORTCUTS</span>
-      <button class="manage-button" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || drag !== null}><Settings2 size={14} />{managing ? 'Done' : 'Manage shortcuts'}</button>
+      <button class="manage-button" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || drag !== null}><Settings2 size={14} />{managing ? 'Done' : 'Manage shortcuts'}</button>
     </div>
   </div>
 
@@ -176,8 +179,9 @@
   {#if managing && data.loaded}
     <div class="shortcut-manager">
       <div class="manager-heading"><div><h2>Your shortcuts</h2><p>Drag the card handles to arrange your places. Changes save across your devices.</p></div>
-        <button bind:this={addButton} class="editor-primary" onclick={() => edit()} disabled={data.busy || editorOpen || drag !== null}><Plus size={15} />Add shortcut</button>
+        <div class="manager-add-actions"><button class="editor-primary" onclick={() => serviceOpen = true} disabled={data.busy || editorOpen || serviceOpen || drag !== null}><Plus size={15} />Add service</button><button bind:this={addButton} class="editor-primary" onclick={() => edit()} disabled={data.busy || editorOpen || serviceOpen || drag !== null}><Plus size={15} />Add shortcut</button></div>
       </div>
+      {#if serviceOpen}<ServiceSetup onclose={() => serviceOpen = false} onsaved={snapshot => store.accept(snapshot)} />{/if}
       {#if editorOpen}
         <form class="shortcut-editor" onsubmit={save}>
           <div class="editor-heading"><h3>{editingId ? 'Edit shortcut' : 'New shortcut'}</h3><button type="button" class="small-icon" aria-label="Close shortcut editor" onclick={closeEditor} disabled={data.busy}><X size={18} /></button></div>
@@ -215,8 +219,8 @@
       <div class="managed-list" aria-label="Shortcut order">
         {#each data.items as item, index (item.id)}{@const Icon = shortcutIcon(item.icon)}
           <div class="managed-row"><span class="managed-icon" style:color={item.color}><Icon size={19} /></span><div class="managed-name"><strong>{item.name}</strong><small>{item.description || (item.action === 'copy' ? 'Copy text' : item.value)}</small></div>
-            <div class="row-actions"><button class="small-icon" disabled={index === 0 || data.busy || editorOpen || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={15} /></button><button class="small-icon" disabled={index === data.items.length - 1 || data.busy || editorOpen || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={15} /></button>
-              <button class="small-icon" disabled={data.busy || editorOpen || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={15} /></button><button class="small-icon" disabled={data.busy || editorOpen || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={15} /></button></div>
+            <div class="row-actions"><button class="small-icon" disabled={index === 0 || data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={15} /></button><button class="small-icon" disabled={index === data.items.length - 1 || data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={15} /></button>
+              <button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={15} /></button><button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={15} /></button></div>
           </div>
           {#if deleting === item.id}<div class="delete-confirm" role="group" aria-label={`Confirm deleting ${item.name}`}><span>Delete “{item.name}”?</span><button disabled={data.busy} onclick={() => deleting = null}>Keep shortcut</button><button class="delete-button" disabled={data.busy} onclick={() => remove(item.id)}>Delete shortcut</button></div>{/if}
         {/each}
@@ -250,6 +254,7 @@
   .drag-status:empty { display: none; }
 
   .shortcut-heading-actions, .manage-button, .manager-heading, .editor-heading, .editor-primary, .row-actions, .managed-row, .editor-footer, .color-picker, .delete-confirm { display: flex; align-items: center; gap: 10px; }
+  .manager-add-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
   .shortcut-heading-actions { gap: 18px; }
   button, input, select, textarea { font: inherit; }
   button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }

@@ -199,7 +199,7 @@ function dragHandlers() {
   const tree = ts.createSourceFile('Shortcuts.ts', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const names = ['startDrag','moveDrag','updateDrag','endDrag','cancelDrag','cancelPointer','autoScroll','dragKey'];
   const handlers = tree.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)).map(node => node.getText(tree)).join('\n');
-  const code = `let gesture=null, drag=null, captured=null, scrollFrame, dragNotice='', deleting=null, editorOpen=false;
+  const code = `let gesture=null, drag=null, captured=null, scrollFrame, dragNotice='', deleting=null, editorOpen=false, serviceOpen=false;
     let data={busy:false,revision:9,items:['a','b','c','d'].map(id=>({id}))};
     const grid={querySelectorAll:()=>bounds.map(rect=>({getBoundingClientRect:()=>rect}))};
     ${handlers}
