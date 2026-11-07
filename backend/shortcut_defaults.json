@@ -1,0 +1,101 @@
+[
+  {
+    "id": "nas",
+    "name": "Synology NAS",
+    "description": "Open DSM",
+    "color": "#a4b9e4",
+    "value": "https://dsm.dledwith.com",
+    "icon": "HardDrive",
+    "action": "open",
+    "aliases": [
+      "nas",
+      "synology",
+      "dsm"
+    ]
+  },
+  {
+    "id": "vault",
+    "name": "Vaultwarden",
+    "description": "Password manager",
+    "color": "#a9c9b4",
+    "value": "https://vault.dledwith.com",
+    "icon": "LockKeyhole",
+    "action": "open",
+    "aliases": [
+      "vault",
+      "passwords",
+      "vaultwarden"
+    ]
+  },
+  {
+    "id": "qbit",
+    "name": "qBittorrent",
+    "description": "Torrent client",
+    "color": "#8fb4df",
+    "value": "https://qbit.dledwith.com",
+    "icon": "HardDriveDownload",
+    "action": "open",
+    "aliases": [
+      "qbit",
+      "qbittorrent",
+      "bittorrent",
+      "torrent"
+    ]
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "description": "Code repositories",
+    "color": "#bdc3d5",
+    "value": "https://github.com/dledw001",
+    "icon": "GitBranch",
+    "action": "open",
+    "aliases": [
+      "github",
+      "git",
+      "repos"
+    ]
+  },
+  {
+    "id": "ssh",
+    "name": "SSH into Arch",
+    "description": "Copy SSH command",
+    "color": "#c6b4e6",
+    "value": "ssh arch",
+    "icon": "Terminal",
+    "action": "copy",
+    "aliases": [
+      "ssh arch",
+      "arch",
+      "ssh"
+    ]
+  },
+  {
+    "id": "tailscale",
+    "name": "Tailscale",
+    "description": "Network administration",
+    "color": "#d4b5a3",
+    "value": "https://login.tailscale.com/admin/machines",
+    "icon": "Network",
+    "action": "open",
+    "aliases": [
+      "tailscale",
+      "vpn",
+      "network"
+    ]
+  },
+  {
+    "id": "cloudflare",
+    "name": "Cloudflare",
+    "description": "Domains and DNS",
+    "color": "#e2b780",
+    "value": "https://dash.cloudflare.com",
+    "icon": "Cloud",
+    "action": "open",
+    "aliases": [
+      "cloudflare",
+      "cf",
+      "domains"
+    ]
+  }
+]

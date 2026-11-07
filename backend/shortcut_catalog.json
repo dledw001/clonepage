@@ -1,0 +1,215 @@
+{
+  "icons": [
+    {
+      "key": "HardDrive",
+      "label": "Hard drive",
+      "keywords": "nas storage disk"
+    },
+    {
+      "key": "HardDriveDownload",
+      "label": "Drive download",
+      "keywords": "torrent download storage"
+    },
+    {
+      "key": "Server",
+      "label": "Server",
+      "keywords": "hosting nas"
+    },
+    {
+      "key": "Network",
+      "label": "Network",
+      "keywords": "tailscale vpn"
+    },
+    {
+      "key": "Router",
+      "label": "Router",
+      "keywords": "wifi internet"
+    },
+    {
+      "key": "Wifi",
+      "label": "Wi-Fi",
+      "keywords": "wireless network"
+    },
+    {
+      "key": "Cloud",
+      "label": "Cloud",
+      "keywords": "cloudflare hosting"
+    },
+    {
+      "key": "Globe",
+      "label": "Globe",
+      "keywords": "web internet browser"
+    },
+    {
+      "key": "Link",
+      "label": "Link",
+      "keywords": "website bookmark"
+    },
+    {
+      "key": "LockKeyhole",
+      "label": "Lock",
+      "keywords": "vault passwords security"
+    },
+    {
+      "key": "Shield",
+      "label": "Shield",
+      "keywords": "security dns protection"
+    },
+    {
+      "key": "KeyRound",
+      "label": "Key",
+      "keywords": "password authentication"
+    },
+    {
+      "key": "GitBranch",
+      "label": "Git branch",
+      "keywords": "github code repositories"
+    },
+    {
+      "key": "Code",
+      "label": "Code",
+      "keywords": "development programming"
+    },
+    {
+      "key": "Terminal",
+      "label": "Terminal",
+      "keywords": "ssh shell command"
+    },
+    {
+      "key": "Download",
+      "label": "Download",
+      "keywords": "files torrent"
+    },
+    {
+      "key": "Upload",
+      "label": "Upload",
+      "keywords": "files transfer"
+    },
+    {
+      "key": "Folder",
+      "label": "Folder",
+      "keywords": "files storage"
+    },
+    {
+      "key": "FileText",
+      "label": "Document",
+      "keywords": "text notes"
+    },
+    {
+      "key": "NotebookPen",
+      "label": "Notebook",
+      "keywords": "notes writing"
+    },
+    {
+      "key": "Bookmark",
+      "label": "Bookmark",
+      "keywords": "reading saved"
+    },
+    {
+      "key": "Rss",
+      "label": "RSS",
+      "keywords": "feeds news"
+    },
+    {
+      "key": "Mail",
+      "label": "Mail",
+      "keywords": "email inbox"
+    },
+    {
+      "key": "CalendarDays",
+      "label": "Calendar",
+      "keywords": "events schedule"
+    },
+    {
+      "key": "Activity",
+      "label": "Activity",
+      "keywords": "monitoring health metrics"
+    },
+    {
+      "key": "Gauge",
+      "label": "Gauge",
+      "keywords": "dashboard performance"
+    },
+    {
+      "key": "ChartNoAxesCombined",
+      "label": "Chart",
+      "keywords": "statistics analytics"
+    },
+    {
+      "key": "Database",
+      "label": "Database",
+      "keywords": "data sql"
+    },
+    {
+      "key": "Monitor",
+      "label": "Monitor",
+      "keywords": "desktop computer"
+    },
+    {
+      "key": "House",
+      "label": "Home",
+      "keywords": "homepage house"
+    },
+    {
+      "key": "Film",
+      "label": "Film",
+      "keywords": "movies media plex jellyfin"
+    },
+    {
+      "key": "Tv",
+      "label": "Television",
+      "keywords": "shows media"
+    },
+    {
+      "key": "Music",
+      "label": "Music",
+      "keywords": "audio streaming"
+    },
+    {
+      "key": "Image",
+      "label": "Image",
+      "keywords": "photos gallery"
+    },
+    {
+      "key": "Gamepad2",
+      "label": "Gamepad",
+      "keywords": "games gaming"
+    },
+    {
+      "key": "Settings",
+      "label": "Settings",
+      "keywords": "administration tools"
+    },
+    {
+      "key": "Search",
+      "label": "Search",
+      "keywords": "lookup find"
+    },
+    {
+      "key": "Cpu",
+      "label": "CPU",
+      "keywords": "processor hardware"
+    },
+    {
+      "key": "Container",
+      "label": "Container",
+      "keywords": "docker containers"
+    },
+    {
+      "key": "BookOpen",
+      "label": "Book",
+      "keywords": "reading library"
+    }
+  ],
+  "colors": [
+    "#a4b9e4",
+    "#a9c9b4",
+    "#8fb4df",
+    "#bdc3d5",
+    "#c6b4e6",
+    "#d4b5a3",
+    "#e2b780",
+    "#d5a5b3",
+    "#83c7ce"
+  ]
+}

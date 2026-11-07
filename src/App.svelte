@@ -1,11 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import {
-    ArrowRight, ArrowUpRight, Cloud,
-    Command, GitBranch, HardDrive,
-    LockKeyhole, Moon, Search, Sun,
-    Terminal, Network, House, Activity, HardDriveDownload
-  } from '@lucide/svelte';
+  import { ArrowRight, Command, Moon, Search, Sun, House, Activity } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
@@ -13,81 +8,13 @@
   import SavedArticle from './components/SavedArticle.svelte';
   import { PageNavigation, isPlainClick, webSearchUrl } from './lib/navigation';
 
-  type Action = 'open' | 'copy';
+  import Shortcuts from './components/Shortcuts.svelte';
+  import { shortcutIcon } from './lib/shortcut-icons';
+  import { ShortcutStore, type Shortcut, type ShortcutState } from './lib/shortcuts';
 
-  const commands = [
-    {
-      id: 'nas',
-      name: 'Synology NAS',
-      description: 'Open DSM',
-      aliases: ['nas', 'synology', 'dsm'],
-      icon: HardDrive,
-      color: '#a4b9e4',
-      action: 'open' as Action,
-      value: 'https://dsm.dledwith.com'
-    },
-    {
-      id: 'vault',
-      name: 'Vaultwarden',
-      description: 'Password manager',
-      aliases: ['vault', 'passwords', 'vaultwarden'],
-      icon: LockKeyhole,
-      color: '#a9c9b4',
-      action: 'open' as Action,
-      value: 'https://vault.dledwith.com' // Add your Vaultwarden URL
-    },
-    {
-      id: 'qbit',
-      name: 'qBittorrent',
-      description: 'Torrent client',
-      aliases: ['qbit', 'qbittorrent', 'bittorrent', 'torrent'],
-      icon: HardDriveDownload,
-      color: '#8fb4df',
-      action: 'open' as Action,
-      value: 'https://qbit.dledwith.com'
-    },
-    {
-      id: 'github',
-      name: 'GitHub',
-      description: 'Code repositories',
-      aliases: ['github', 'git', 'repos'],
-      icon: GitBranch,
-      color: '#bdc3d5',
-      action: 'open' as Action,
-      value: 'https://github.com/dledw001'
-    },
-    {
-      id: 'ssh',
-      name: 'SSH into Arch',
-      description: 'Copy SSH command',
-      aliases: ['ssh arch', 'arch', 'ssh'],
-      icon: Terminal,
-      color: '#c6b4e6',
-      action: 'copy' as Action,
-      value: 'ssh arch'
-    },
-    {
-      id: 'tailscale',
-      name: 'Tailscale',
-      description: 'Network administration',
-      aliases: ['tailscale', 'vpn', 'network'],
-      icon: Network,
-      color: '#d4b5a3',
-      action: 'open' as Action,
-      value: 'https://login.tailscale.com/admin/machines'
-    },
-    {
-      id: 'cloudflare',
-      name: 'Cloudflare',
-      description: 'Domains and DNS',
-      aliases: ['cloudflare', 'cf', 'domains'],
-      icon: Cloud,
-      color: '#e2b780',
-      action: 'open' as Action,
-      value: 'https://dash.cloudflare.com'
-    }
-  ];
-
+  let shortcutState = $state<ShortcutState>({ items: [], revision: 0, loaded: false, loading: false, busy: false, conflict: false, error: '' });
+  const shortcutStore = new ShortcutStore(next => shortcutState = next);
+  const commands = $derived(shortcutState.items.map(item => ({ ...item, icon: shortcutIcon(item.icon) })));
   type CommandItem = (typeof commands)[number];
 
   let now = $state(new Date());
@@ -151,6 +78,10 @@
   );
 
   onMount(() => {
+    void shortcutStore.refresh();
+    const refreshShortcuts = () => { if (!document.hidden) void shortcutStore.refresh(); };
+    document.addEventListener('visibilitychange', refreshShortcuts);
+    window.addEventListener('focus', refreshShortcuts);
     const saved = localStorage.getItem('clonepage-theme');
     if (saved === 'light' || saved === 'dark') {
       theme = saved;
@@ -162,6 +93,9 @@
 
     const stopNavigation = navigation?.start();
     return () => {
+      shortcutStore.dispose();
+      document.removeEventListener('visibilitychange', refreshShortcuts);
+      window.removeEventListener('focus', refreshShortcuts);
       clearInterval(interval);
       stopNavigation?.();
     };
@@ -193,7 +127,7 @@
     }, 3000);
   }
 
-  async function execute(command: CommandItem) {
+  async function execute(command: Pick<Shortcut, 'action' | 'value' | 'name'>) {
     paletteOpen = false;
     query = '';
 
@@ -208,7 +142,7 @@
     }
 
     if (!command.value) {
-      notify(`Configure the ${command.name} URL in App.svelte`);
+      notify(`Edit ${command.name} in Manage shortcuts to set its URL.`);
       return;
     }
 
@@ -234,8 +168,8 @@
     } else if (event.key === 'Enter') {
       event.preventDefault();
 
-      if (matches.length && selected >= 0) {
-        execute(matches[selected]);
+      if (matches.length) {
+        execute(matches[Math.max(0, Math.min(selected, matches.length - 1))]);
       } else {
         searchWeb();
       }
@@ -351,6 +285,7 @@
                 <span class="result-text"><strong>{command.name}</strong><small>{command.description}</small></span>
                 <ArrowRight size={16} />
               {/snippet}
+              {#if !shortcutState.loaded}<p class="command-status">{shortcutState.loading ? 'Loading shortcuts...' : 'Shortcuts could not be loaded.'}</p>{:else if !commands.length}<p class="command-status">Add your first shortcut in Your Places.</p>{/if}
               {#each matches as command, index (command.id)}
                 {#if command.action === 'open' && command.value}
                   <a class="result" class:selected={selected === index} href={command.value} target="_blank" rel="noopener noreferrer"
@@ -384,35 +319,7 @@
         </p>
       </section>
 
-      <section class="shortcuts">
-        <div class="section-header">
-          <span>YOUR PLACES</span>
-          <span class="section-count">
-            {String(commands.length).padStart(2, '0')}
-            SHORTCUTS
-          </span>
-        </div>
-
-        <div class="shortcut-grid">
-          {#snippet shortcutContent(command: CommandItem)}
-            <span class="shortcut-icon"><command.icon size={21} strokeWidth={1.65} /></span>
-            <span class="shortcut-bottom"><span class="shortcut-name">{command.name}</span><ArrowUpRight size={14} class="shortcut-arrow" /></span>
-          {/snippet}
-          {#each commands as command (command.id)}
-            {#if command.action === 'open' && command.value}
-              <a class="shortcut-card" style={`--accent:${command.color}`} href={command.value} target="_blank" rel="noopener noreferrer">{@render shortcutContent(command)}</a>
-            {:else}
-            <button
-              class="shortcut-card"
-              style={`--accent:${command.color}`}
-              onclick={() => execute(command)}
-            >
-              {@render shortcutContent(command)}
-            </button>
-            {/if}
-          {/each}
-        </div>
-      </section>
+      <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} />
       <ReadingList active={page === 'home'} onnavigate={navigate} />
       <Feeds active={page === 'home'} />
       </div>

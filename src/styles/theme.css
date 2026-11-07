@@ -414,7 +414,7 @@ a.result, a.web-result, a.shortcut-card { text-decoration: none; }
 
 .shortcut-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 13px;
 }
 
@@ -554,3 +554,5 @@ footer {
         animation-duration: 0.01ms !important;
     }
 }
+
+.command-status { margin: 10px 13px; color: var(--muted); font-size: 12px; line-height: 1.7; }

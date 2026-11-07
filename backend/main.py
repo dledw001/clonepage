@@ -15,6 +15,8 @@ from nas_temps import NasTempsGateway, router as infrastructure_router
 from feeds import initialize_feeds, router as feeds_router
 from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_copies, router as saved_copies_router
 
+from shortcuts import initialize_shortcuts, router as shortcuts_router
+
 import re
 
 DB_PATH = Path(
@@ -204,6 +206,7 @@ async def lifespan(app: FastAPI):
     initialize_search()
     initialize_feeds()
     initialize_saved_copies()
+    initialize_shortcuts()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
     async with httpx.AsyncClient(
@@ -226,6 +229,7 @@ app = FastAPI(
 app.include_router(infrastructure_router)
 app.include_router(feeds_router)
 app.include_router(saved_copies_router)
+app.include_router(shortcuts_router)
 
 
 class ArticleCreate(BaseModel):
