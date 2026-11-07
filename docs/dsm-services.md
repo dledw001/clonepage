@@ -15,6 +15,10 @@ DSM_UPSTREAM_HOSTS=10.0.0.149,127.0.0.1,localhost
 
 These are connection settings, not credentials. Set them in `.env` if different; `.env.example` documents the keys. The browser must use the exact configured HTTPS origin. There is no HTTP/insecure-certificate override for real DSM connections.
 
+The API container maps `dsm.dledwith.com` to the NAS LAN address `10.0.0.149` through Compose `extra_hosts`. This avoids the container trying to reach DSM through the NAS's own Tailscale address, which timed out on this installation. The URL remains `https://dsm.dledwith.com`, so the HTTPS hostname and certificate verification are preserved. If the DSM hostname or NAS LAN address changes, update that mapping in `docker-compose.yml` as well.
+
+After changing this mapping, recreate the API container (`sudo docker compose up -d --force-recreate api`). A plain container restart does not apply Compose configuration changes.
+
 Deploy the API and web together after pulling the committed changes:
 
 ```sh

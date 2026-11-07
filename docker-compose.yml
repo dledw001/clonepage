@@ -2,6 +2,9 @@ services:
   api:
     build: ./backend
     restart: unless-stopped
+    extra_hosts:
+      # Reach DSM over the LAN while keeping its verified HTTPS hostname.
+      dsm.dledwith.com: "10.0.0.149"
     environment:
       READING_DB_PATH: /data/reading.sqlite3
       NAS_TEMPS_URL: ${NAS_TEMPS_URL:-http://10.0.0.149:8888}
