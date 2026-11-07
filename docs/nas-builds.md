@@ -8,6 +8,8 @@ Audit and funding requests are excluded from this installation step so they do n
 
 The helper uses POSIX sh and supports both the NAS's legacy Docker builder and Compose/BuildKit. Git attributes keep shell scripts at LF line endings in Windows checkouts. Only dependency manifests and the helper are copied into the install layer; ordinary application edits can reuse that layer. The build image stays on Node 22 Alpine, which successfully installed these exact dependencies on the NAS.
 
+The NAS's default BuildKit network repeatedly failed to resolve `registry.npmjs.org` (`EAI_AGAIN`) during both install attempts. Building through Compose with `build.network: host` succeeded: dependency installation took 6.3 seconds and the complete build took 17.2 seconds. The web service now uses host networking for its build steps to avoid that failing DNS path. This setting applies only while building; the running containers retain their existing networking and port bindings.
+
 ## Deploy normally
 
 ```sh
@@ -19,12 +21,12 @@ Transient retries cannot guarantee success during an outage or a persistent buil
 
 ## Known working fallback
 
-The original Compose installation failed once, while a subsequent legacy Docker installation succeeded. That difference did not establish a definitive root cause. If Compose continues to fail, the following fallback has completed successfully on this installation:
+A legacy Docker build also succeeded during earlier troubleshooting. If needed, build the images individually; the web command below uses the same host-network setting as Compose:
 
 ```sh
 sudo docker build -t clonepage-api ./backend &&
 sudo docker build -t clonepage-worker ./backend &&
-sudo docker build -t clonepage-web . &&
+sudo docker build --network=host -t clonepage-web . &&
 sudo docker compose up -d --no-build --force-recreate
 ```
 

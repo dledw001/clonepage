@@ -17,7 +17,10 @@ services:
       - ./data:/data
 
   web:
-    build: .
+    build:
+      context: .
+      # Avoid DNS failures in the NAS BuildKit bridge during npm downloads.
+      network: host
     restart: unless-stopped
     ports:
       - "127.0.0.1:8765:80"
