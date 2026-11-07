@@ -21,7 +21,7 @@ export class ShortcutStore {
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(15000)]) });
     if (!response.ok) {
-      let message = 'Could not save shortcuts. Your changes are kept in the form; try again.';
+      let message = 'Could not save shortcuts. Try again.';
       try {
         const payload = await response.json();
         if (typeof payload.detail === 'string') message = payload.detail;
@@ -32,14 +32,14 @@ export class ShortcutStore {
     return await response.json() as ShortcutSnapshot;
   }
 
-  async refresh() {
+  async refresh(preserveError = false) {
     if (this.disposed) return;
     if (this.state.busy) { this.queued = true; return; }
     const sequence = ++this.sequence;
     this.update({ loading: true });
     try {
       const result = await this.request('');
-      if (sequence === this.sequence) this.update({ ...result, loaded: true, error: this.state.conflict ? this.state.error : '' });
+      if (sequence === this.sequence) this.update({ ...result, loaded: true, error: this.state.conflict || preserveError ? this.state.error : '' });
     } catch {
       if (sequence === this.sequence) this.update({ error: this.state.loaded ? 'Could not refresh shortcuts. Showing the last loaded list.' : 'Could not load your shortcuts. Try again.' });
     } finally {
@@ -64,7 +64,7 @@ export class ShortcutStore {
       return false;
     } finally {
       this.update({ busy: false });
-      if (this.queued && !this.disposed) { this.queued = false; void this.refresh(); }
+      if (this.queued && !this.disposed) { this.queued = false; void this.refresh(Boolean(this.state.error)); }
     }
   }
 
@@ -79,7 +79,25 @@ export class ShortcutStore {
     const from = ids.indexOf(id); const to = from + offset;
     if (from < 0 || to < 0 || to >= ids.length) return Promise.resolve(false);
     [ids[from], ids[to]] = [ids[to], ids[from]];
-    return this.write('/order', { method: 'PUT', body: JSON.stringify({ ids, revision: this.state.revision }) });
+    return this.reorder(ids);
+  }
+  async reorder(ids: string[], revision = this.state.revision) {
+    if (this.disposed || this.state.busy) return false;
+    const previous = this.state.items;
+    const byId = new Map(previous.map(item => [item.id, item]));
+    if (ids.length !== previous.length || new Set(ids).size !== ids.length || ids.some(id => !byId.has(id))) return false;
+    if (ids.every((id, index) => id === previous[index].id)) return false;
+    const optimistic = ids.map(id => byId.get(id)!);
+    this.update({ items: optimistic });
+    const saved = await this.write('/order', { method: 'PUT', body: JSON.stringify({ ids, revision }) });
+    if (!saved && !this.disposed) {
+      // Keep a freshly loaded conflicting order; otherwise restore our last saved order.
+      if (this.state.items === optimistic) this.update({ items: previous });
+      this.update({ error: this.state.conflict
+        ? 'Shortcuts changed on another device. Check the order and try again.'
+        : 'Could not save the new order. The previous order has been restored. Try again.' });
+    }
+    return saved;
   }
   dispose() { this.disposed = true; ++this.sequence; this.controller.abort(); }
 }

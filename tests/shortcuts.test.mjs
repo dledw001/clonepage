@@ -108,3 +108,130 @@ test('the default browser fetch is called without binding it to the shortcut sto
     assert.equal(context, undefined); assert.equal(store.state.loaded, true);
   } finally { globalThis.fetch = previous; }
 });
+
+
+test('drag ordering is optimistic and restores the last saved order on a failed save', async () => {
+  const pending = deferred();
+  const store = new ShortcutStore(() => {}, (_, options) => options.method ? pending.promise : Promise.resolve(response(snapshot([item('a'), item('b'), item('c')], 2))));
+  await store.refresh(); const saving = store.reorder(['c', 'a', 'b']);
+  assert.deepEqual(store.state.items.map(item => item.id), ['c', 'a', 'b']); assert.equal(store.state.busy, true);
+  pending.resolve(response({ detail: 'Unavailable' }, 500)); assert.equal(await saving, false);
+  assert.deepEqual(store.state.items.map(item => item.id), ['a', 'b', 'c']); assert.equal(store.state.revision, 2);
+  assert.match(store.state.error, /previous order has been restored/); assert.equal(store.state.busy, false);
+});
+
+test('drag conflicts retain the latest server order and use the revision captured at pointer-down', async () => {
+  let reads = 0; let body;
+  const store = new ShortcutStore(() => {}, async (_, options) => {
+    if (options.method) { body = JSON.parse(options.body); return response({ detail: 'Changed' }, 409); }
+    return response(++reads === 1 ? snapshot([item('a'), item('b')], 3) : snapshot([item('b'), item('a'), item('new')], 4));
+  });
+  await store.refresh(); assert.equal(await store.reorder(['b', 'a'], 2), false);
+  assert.equal(body.revision, 2); assert.deepEqual(store.state.items.map(item => item.id), ['b', 'a', 'new']);
+  assert.equal(store.state.revision, 4); assert.match(store.state.error, /another device/);
+});
+
+test('unchanged or incomplete drag orders never save and late reads cannot undo a drop', async () => {
+  const old = deferred(); let writes = 0; let reads = 0;
+  const store = new ShortcutStore(() => {}, (_, options) => {
+    if (options.method) { writes++; return Promise.resolve(response(snapshot([item('b'), item('a')], 1))); }
+    return ++reads === 1 ? Promise.resolve(response(snapshot([item('a'), item('b')]))) : old.promise;
+  });
+  await store.refresh();
+  for (const ids of [['a','b'], ['a'], ['a','a'], ['b','missing']]) assert.equal(await store.reorder(ids), false);
+  assert.equal(writes, 0);
+  const pending = store.refresh(); assert.equal(await store.reorder(['b','a']), true);
+  old.resolve(response(snapshot([item('a'), item('b')]))); await pending;
+  assert.deepEqual(store.state.items.map(item => item.id), ['b','a']);
+});
+
+test('a conflict whose refresh also fails rolls back the optimistic order', async () => {
+  let reads = 0;
+  const store = new ShortcutStore(() => {}, async (_, options) => {
+    if (options.method) return response({ detail: 'Changed' }, 409);
+    if (++reads > 1) throw Error('offline');
+    return response(snapshot([item('a'), item('b')]));
+  });
+  await store.refresh(); await store.reorder(['b','a']);
+  assert.deepEqual(store.state.items.map(item => item.id), ['a','b']); assert.match(store.state.error, /another device/);
+});
+
+const dragSource = readFileSync(new URL('../src/lib/shortcut-drag.ts', import.meta.url), 'utf8');
+const dragJs = ts.transpileModule(dragSource, { compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext } }).outputText;
+const { ShortcutDrag, shortcutDropSlot, arrangeShortcuts } = await import(`data:text/javascript;base64,${Buffer.from(dragJs).toString('base64')}`);
+const bounds = (left, top) => ({ left, right: left + 100, top, bottom: top + 120 });
+const grid = [bounds(0,0), bounds(112,0), bounds(224,0), bounds(0,132)];
+
+test('dragging chooses insertion positions across grid columns and a short final row', () => {
+  assert.equal(shortcutDropSlot(grid, 10, 60), 0);
+  assert.equal(shortcutDropSlot(grid, 200, 60), 2);
+  assert.equal(shortcutDropSlot(grid, 320, 60), 3);
+  assert.equal(shortcutDropSlot(grid, 10, 190), 3);
+  assert.equal(shortcutDropSlot(grid, 300, 190), 4);
+  assert.equal(shortcutDropSlot(grid, 700, 60), null);
+  assert.equal(shortcutDropSlot([], 0, 0), null);
+});
+
+test('dragging adjusts the insertion gap when moving a card forward or backward', () => {
+  assert.deepEqual(arrangeShortcuts(['a','b','c','d'], 'a', 3), ['b','c','a','d']);
+  assert.deepEqual(arrangeShortcuts(['a','b','c','d'], 'd', 0), ['d','a','b','c']);
+  assert.deepEqual(arrangeShortcuts(['a','b','c','d'], 'a', 4), ['b','c','d','a']);
+});
+
+test('a click, a different pointer, and a drop outside the grid do not reorder', () => {
+  const gesture = new ShortcutDrag('a', 7, 4, ['a','b','c','d'], 80, 30);
+  gesture.move(8, 300, 190, grid); assert.equal(gesture.active, false);
+  gesture.move(7, 82, 32, grid); assert.equal(gesture.finish(7), null);
+  gesture.move(7, 300, 190, grid); assert.deepEqual(gesture.finish(7), ['b','c','d','a']);
+  assert.equal(gesture.finish(8), null); assert.equal(gesture.revision, 4);
+  gesture.move(7, 900, 900, grid); assert.equal(gesture.finish(7), null);
+});
+
+test('dragging within the original position avoids an unnecessary save', () => {
+  const gesture = new ShortcutDrag('b', 1, 0, ['a','b','c','d'], 150, 30);
+  gesture.move(1, 180, 60, grid); assert.equal(gesture.active, true); assert.equal(gesture.finish(1), null);
+});
+
+
+function dragHandlers() {
+  const component = readFileSync(new URL('../src/components/Shortcuts.svelte', import.meta.url), 'utf8');
+  const script = component.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
+  const tree = ts.createSourceFile('Shortcuts.ts', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const names = ['startDrag','moveDrag','updateDrag','endDrag','cancelDrag','cancelPointer','autoScroll','dragKey'];
+  const handlers = tree.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)).map(node => node.getText(tree)).join('\n');
+  const code = `let gesture=null, drag=null, captured=null, scrollFrame, dragNotice='', deleting=null, editorOpen=false;
+    let data={busy:false,revision:9,items:['a','b','c','d'].map(id=>({id}))};
+    const grid={querySelectorAll:()=>bounds.map(rect=>({getBoundingClientRect:()=>rect}))};
+    ${handlers}
+    return {startDrag,moveDrag,endDrag,cancelPointer,dragKey,drag:()=>drag,notice:()=>dragNotice,
+      setBusy(value){data.busy=value},setEditing(value){editorOpen=value}};`;
+  const compiled = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2023 } }).outputText;
+  let pointer; let releases = 0; const saves = [];
+  const handle = { closest:()=>({getBoundingClientRect:()=>({ ...grid[0],width:100,height:120 })}), focus(){},
+    setPointerCapture(id){pointer=id}, hasPointerCapture:id=>pointer===id, releasePointerCapture(){pointer=undefined;releases++} };
+  const controller = new Function('ShortcutDrag','bounds','store','requestAnimationFrame','cancelAnimationFrame',compiled)(ShortcutDrag,grid,
+    {reorder:async(ids,revision)=>{saves.push({ids,revision});return true}},()=>1,()=>{});
+  const event = (extra={}) => ({pointerId:7,pointerType:'touch',isPrimary:true,button:0,clientX:80,clientY:30,currentTarget:handle,preventDefault(){},...extra});
+  return {controller,event,saves,releases:()=>releases};
+}
+
+test('touch pointer handlers capture the grip, save once on release, and release capture', async () => {
+  const {controller:c,event,saves,releases} = dragHandlers();
+  c.startDrag(event(),{id:'a'}); c.moveDrag(event({clientX:300,clientY:190}));
+  assert.equal(c.drag().active,true);
+  await c.endDrag(event({clientX:300,clientY:190}));
+  assert.deepEqual(saves,[{ids:['b','c','d','a'],revision:9}]);
+  assert.equal(c.drag(),null);assert.equal(releases(),1);assert.match(c.notice(),/saved/);
+});
+
+test('pointer cancellation, Escape, and disabled editing never save a drag', async () => {
+  const {controller:c,event,saves} = dragHandlers();
+  for (const extra of [{isPrimary:false},{button:2}]) { c.startDrag(event(extra),{id:'a'});assert.equal(c.drag(),null); }
+  c.setBusy(true);c.startDrag(event(),{id:'a'});assert.equal(c.drag(),null);c.setBusy(false);
+  c.setEditing(true);c.startDrag(event(),{id:'a'});assert.equal(c.drag(),null);c.setEditing(false);
+  c.startDrag(event(),{id:'a'});c.moveDrag(event({clientX:300,clientY:190}));
+  c.cancelPointer(event()); await c.endDrag(event({clientX:300,clientY:190}));assert.equal(c.drag(),null);
+  c.startDrag(event(),{id:'a'});c.moveDrag(event({clientX:300,clientY:190}));
+  c.dragKey({key:'Escape',preventDefault(){}});await c.endDrag(event({clientX:300,clientY:190}));
+  assert.equal(c.drag(),null);assert.deepEqual(saves,[]);
+});

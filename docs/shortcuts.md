@@ -2,7 +2,7 @@
 
 Choose **Manage shortcuts** beside Your Places to add, edit, delete, or reorder shortcuts. The same saved list powers the service cards and command search. Website shortcuts open in a new tab; Copy text shortcuts copy their value to the clipboard.
 
-The editor offers 40 searchable Lucide icons, the existing muted color palette, a custom color picker, and a live preview. Aliases are comma-separated. Up/down controls work with a mouse, keyboard, or touchscreen.
+The editor offers 40 searchable Lucide icons, the existing muted color palette, a custom color picker, and a live preview. Aliases are comma-separated. In Manage shortcuts, drag a card by its grip to change the order. The insertion marker shows its destination; dropping saves automatically. Handles work with a mouse, pen, or touch, and the page scrolls when a dragged card reaches the top or bottom edge. Escape, cancelling the pointer, or dropping outside the grid leaves the order unchanged. Failed saves restore the previous order. Up/down controls remain available, and arrow keys on a focused grip move its shortcut. Outside management mode, cards retain their usual open/copy actions.
 
 Shortcuts live in the existing SQLite database (`READING_DB_PATH`), so the normal data-directory backup includes them. Other devices fetch changes when the page becomes visible or gains focus. Saves update the current page immediately.
 
