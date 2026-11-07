@@ -1,11 +1,12 @@
 
 <script lang="ts">
     import { onMount } from 'svelte';
+    import DocumentUpload from './DocumentUpload.svelte';
     import {
         Archive, ArchiveRestore, ArrowUpRight,
         BookOpen, Check, Circle, CircleCheck,
         Pencil, Plus, RefreshCw, Search,
-        Trash2, X
+        Trash2, Upload, X
     } from '@lucide/svelte';
 
     let { active = true, onnavigate }: { active?: boolean; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
@@ -14,6 +15,8 @@
         id: string;
         title: string;
         url: string;
+        source_kind?: 'url' | 'upload';
+        upload_filename?: string | null;
         is_read: boolean;
         saved_at: string;
         archived_at: string | null;
@@ -42,6 +45,7 @@
     let error = $state('');
 
     let adding = $state(false);
+    let uploading = $state(false);
     let saving = $state(false);
     let showAll = $state(false);
 
@@ -245,6 +249,42 @@
             clearInterval(capturePoll);
         };
     });
+
+    async function uploadDocument(file: File, documentTitle: string): Promise<string> {
+        if (saving) return 'Another save is in progress.';
+        if (!file.name.toLowerCase().endsWith('.pdf')) return 'Choose a PDF file.';
+        if (!file.size) return 'The PDF file is empty.';
+        if (file.size > 25 * 1024 * 1024) return 'PDFs must be 25 MB or smaller.';
+        saving = true;
+        error = '';
+        beginWrite();
+        try {
+            const response = await fetch('/api/reading/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name),
+                    'X-Document-Title': encodeURIComponent(documentTitle.trim()) },
+                body: file
+            });
+            if (!response.ok) {
+                const failure = await response.json().catch(() => null);
+                return typeof failure?.detail === 'string' ? failure.detail : 'Could not upload the PDF. Try again.';
+            }
+            const created: Article = await response.json();
+            articles = [created, ...articles.filter(article => article.id !== created.id)];
+            loaded = true;
+            tab = created.archived_at ? 'archive' : 'queue';
+            search = '';
+            searchRevision++;
+            uploading = false;
+            refreshQueued = true;
+            return '';
+        } catch {
+            return 'Could not upload the PDF. Check your connection and try again.';
+        } finally {
+            saving = false;
+            finishWrite();
+        }
+    }
 
     async function save(event: SubmitEvent) {
         event.preventDefault();
@@ -463,9 +503,13 @@
                 <RefreshCw size={17} />
             </button>
 
+            <button class="add-button upload-button" disabled={saving} aria-expanded={uploading}
+                    onclick={() => { uploading = !uploading; adding = false; error = ''; }}>
+                <Upload size={16} />Upload PDF
+            </button>
             <button
-                    class="add-button"
-                    onclick={() => adding = !adding}
+                    class="add-button" disabled={saving} aria-expanded={adding}
+                    onclick={() => { adding = !adding; uploading = false; error = ''; }}
             >
                 <Plus size={16} />
                 Add article
@@ -503,6 +547,10 @@
             />
         </div>
     </div>
+
+    {#if uploading}
+        <DocumentUpload {saving} onupload={uploadDocument} onclose={() => uploading = false} />
+    {/if}
 
     {#if adding}
         <form class="add-form" onsubmit={save}>
@@ -605,16 +653,17 @@
                             </form>
                         {:else}
                             <a
-                                    href={article.url}
-                                    target="_blank"
+                                    href={article.source_kind === 'upload' ? `/reading/${article.id}` : article.url}
+                                    onclick={event => { if (article.source_kind === 'upload') onnavigate?.(event, `/reading/${article.id}`); }}
+                                    target={article.source_kind === 'upload' ? undefined : '_blank'}
                                     rel="noopener noreferrer"
                             >
                                 {article.title}
-                                <ArrowUpRight size={14} />
+                                {#if article.source_kind !== 'upload'}<ArrowUpRight size={14} />{/if}
                             </a>
                         {/if}
 
-                        <small>{hostname(article.url)}</small>
+                        <small>{article.source_kind === 'upload' ? `Uploaded PDF · ${article.upload_filename ?? 'Document'}` : hostname(article.url)}</small>
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
                                 <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>Read saved copy</a>
@@ -627,7 +676,7 @@
                                 <button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)}>Retry saved copy</button>
                             {:else if article.copy_available}
                                 <span title={article.copy_warning ?? undefined}>{article.copy_is_legacy ? 'Recovered text copy' : article.copy_warning ? 'Saved with a note' : 'Copy saved'}{article.copy_saved_at ? ` · ${new Date(article.copy_saved_at).toLocaleDateString()}` : ''}</span>
-                                <button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)} title="Capture a new version; the current copy is kept until it succeeds">Refresh saved copy</button>
+                                {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)} title="Capture a new version; the current copy is kept until it succeeds">Refresh saved copy</button>{/if}
                             {/if}
                         </div>
                         {#if article.index_status === 'failed'}
@@ -724,6 +773,7 @@
     .reading-header {
         justify-content: space-between;
         gap: 12px;
+        flex-wrap: wrap;
     }
 
     .heading {
@@ -761,6 +811,7 @@
     }
 
     .actions {
+        flex-wrap: wrap;
         gap: 8px;
     }
 
@@ -776,6 +827,8 @@
     .icon-action:hover {
         background: var(--surface-hover);
     }
+
+    .upload-button { border: 1px solid var(--line); }
 
     .add-button {
         display: flex;
@@ -917,6 +970,7 @@
     }
 
     .article-info small {
+        overflow-wrap: anywhere;
         display: block;
         margin-top: 5px;
         color: var(--muted);

@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from fastapi import APIRouter, HTTPException, Query, Response
 from typing import Literal
 
-from extractor import ExtractedDocument, extract_pdf_text
+from extractor import ExtractedDocument, extract_pdf_document
 from metadata import is_public_url
 
 router = APIRouter(prefix="/api/reading", tags=["Saved copies"])
@@ -296,7 +296,7 @@ def remove_article_copies(article_id):
 def text_from_saved_copy(row):
     data = resolve_copy_path(row["copy_path"]).read_bytes()
     if row["copy_format"] == "pdf":
-        return extract_pdf_text(data, row["url"])
+        return extract_pdf_document(data, row.get("upload_filename") or row["url"])
     soup = BeautifulSoup(data, "html.parser")
     article = soup.find("article")
     text = article.get_text("\n", strip=True) if article else ""
@@ -323,11 +323,15 @@ def get_copy(article_id: str):
         except ValueError:
             pass
     return {"id": row["id"], "title": row["title"], "url": row["url"], "copy_available": available,
+            "source_kind": row["source_kind"], "upload_filename": row["upload_filename"],
             **{name.strip(): row[name.strip()] for name in COPY_COLUMNS.split(",")}}
 
 
 @router.post("/{article_id}/copy/refresh", status_code=202)
 def refresh_copy(article_id: str):
+    row = copy_row(article_id)
+    if row["source_kind"] == "upload":
+        raise HTTPException(409, "Uploaded PDFs have no website to refresh. Upload the document again if its file is missing.")
     with database() as db:
         # Refresh is explicit; keep the last successful file during collection.
         # language=SQL
@@ -351,7 +355,7 @@ def serve_copy(article_id, download, theme=None):
             break
         except FileNotFoundError:
             if attempt == 1:
-                raise HTTPException(404, "The saved-copy file is missing. Refresh the saved copy to retrieve it again.")
+                raise HTTPException(404, "The uploaded PDF is missing. Upload it again to restore the file." if row["source_kind"] == "upload" else "The saved-copy file is missing. Refresh the saved copy to retrieve it again.")
             row = copy_row(article_id)
         except ValueError as exc:
             raise HTTPException(404, "The saved-copy file is unavailable") from exc

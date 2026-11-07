@@ -124,6 +124,16 @@ def extract_pdf_text(data: bytes, url: str) -> ExtractedDocument:
     return ExtractedDocument(text=result, title=title)
 
 
+def extract_pdf_document(data: bytes, source: str) -> ExtractedDocument:
+    """Keep the original even when a valid PDF has no indexable text."""
+    try:
+        document = extract_pdf_text(data, source)
+    except Exception as error:
+        reader = PdfReader(BytesIO(data), strict=False)
+        document = ExtractedDocument(text="", title=detect_pdf_title(reader, source), text_error=str(error)[:300])
+    return replace(document, pdf=data, source_url=source if source.startswith(("https://", "http://")) else None)
+
+
 def extract_article_text(url: str) -> ExtractedDocument:
     headers = {
         "User-Agent": "Clonepage/0.4",
@@ -192,16 +202,7 @@ def extract_article_text(url: str) -> ExtractedDocument:
 
                 # Recognize PDFs by their file signature.
                 if body.startswith(b"%PDF-"):
-                    data = bytes(body)
-                    try:
-                        document = extract_pdf_text(data, current_url)
-                    except Exception as exc:
-                        # Preserve a valid original PDF even when it is scanned,
-                        # encrypted, or otherwise cannot be indexed as text.
-                        reader = PdfReader(BytesIO(data), strict=False)
-                        return ExtractedDocument(text="", title=detect_pdf_title(reader, current_url), pdf=data,
-                                                 source_url=current_url, text_error=str(exc)[:300])
-                    return replace(document, pdf=data, source_url=current_url)
+                    return extract_pdf_document(bytes(body), current_url)
 
                 # Everything else must be HTML.
                 if content_type not in (

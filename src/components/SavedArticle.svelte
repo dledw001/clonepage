@@ -3,7 +3,7 @@
   import { ArrowLeft, ArrowUpRight, Download, RefreshCw } from '@lucide/svelte';
 
   let { articleId, theme, onback }: { articleId: string; theme: 'light' | 'dark'; onback?: (event: MouseEvent) => void } = $props();
-  type SavedCopy = { id: string; title: string; url: string; copy_available: boolean; copy_status: string;
+  type SavedCopy = { source_kind?: 'url' | 'upload'; upload_filename?: string | null; id: string; title: string; url: string; copy_available: boolean; copy_status: string;
     copy_saved_at: string | null; copy_format: 'html' | 'pdf' | null; copy_size: number | null;
     copy_error: string | null; copy_warning: string | null; copy_retry_at: string | null };
   let info = $state<SavedCopy | null>(null);
@@ -87,12 +87,15 @@
 <section class="saved-article">
   <a class="back" href="/" onclick={onback}><ArrowLeft size={15} />Back to reading list</a>
   <header><div class="eyebrow">YOUR SAVED COPY</div><h1>{info?.title ?? 'Saved article'}</h1>
-    {#if info?.copy_available}<p>Captured {info.copy_saved_at ? new Date(info.copy_saved_at).toLocaleString() : ''} · {info.copy_format === 'pdf' ? 'Original PDF' : 'Readable HTML'}{info.copy_size ? ` · ${fileSize(info.copy_size)}` : ''}</p>{/if}
+    {#if info?.copy_available}<p>{info.source_kind === 'upload' ? 'Uploaded' : 'Captured'} {info.copy_saved_at ? new Date(info.copy_saved_at).toLocaleString() : ''} · {info.copy_format === 'pdf' ? 'Original PDF' : 'Readable HTML'}{info.copy_size ? ` · ${fileSize(info.copy_size)}` : ''}</p>{/if}
     {#if info}<div class="actions">
       {#if info.copy_available}<a class="primary" href={`/api/reading/${articleId}/copy/download`}><Download size={15} />Download {info.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>{/if}
-      <a href={info.url} target="_blank" rel="noopener noreferrer">Open original<ArrowUpRight size={14} /></a>
-      <button disabled={refreshing || pending} onclick={refreshCopy}><RefreshCw size={14} />{pending || refreshing ? 'Saving copy...' : info.copy_available ? 'Refresh saved copy' : 'Retry saved copy'}</button>
+      {#if info.source_kind !== 'upload'}
+        <a href={info.url} target="_blank" rel="noopener noreferrer">Open original<ArrowUpRight size={14} /></a>
+        <button disabled={refreshing || pending} onclick={refreshCopy}><RefreshCw size={14} />{pending || refreshing ? 'Saving copy...' : info.copy_available ? 'Refresh saved copy' : 'Retry saved copy'}</button>
+      {/if}
     </div>{/if}
+    {#if info?.upload_filename}<p>{info.upload_filename}</p>{/if}
   </header>
   {#if error}<p class="notice" role="alert">{error}<button onclick={load}>Try again</button></p>{/if}
   {#if pending}<p class="notice" role="status">{info?.copy_available ? 'A new capture is being prepared. Your previous copy stays available below.' : 'Your saved copy is being prepared by the NAS.'}</p>{/if}
@@ -107,7 +110,7 @@
     {/if}
     <p class="hint">This copy is stored on your NAS. Download it to read without a connection to the NAS.</p>
   {:else if loading}<div class="empty">Loading saved copy...</div>
-  {:else if info && !pending && info.copy_status !== 'failed'}<div class="empty">The saved file is unavailable. Use Retry saved copy to retrieve it again.</div>{/if}
+  {:else if info && !pending && info.copy_status !== 'failed'}<div class="empty">{info.source_kind === 'upload' ? 'The uploaded PDF is missing. Upload the same file again to restore it.' : 'The saved file is unavailable. Use Retry saved copy to retrieve it again.'}</div>{/if}
 </section>
 
 <style>
@@ -116,7 +119,7 @@
   header { margin: 30px 0 24px; }
   .eyebrow { font-size: 9px; letter-spacing: 2px; color: var(--highlight); }
   h1 { margin: 16px 0; font-size: 34px; line-height: 1.3; overflow-wrap: anywhere; }
-  header p, .hint { font-size: 11px; color: var(--muted); line-height: 1.8; }
+  header p, .hint { overflow-wrap: anywhere; font-size: 11px; color: var(--muted); line-height: 1.8; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 22px; }
   .actions a, .actions button { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--highlight); padding: 0; text-decoration: none; font: inherit; font-size: 11px; cursor: pointer; }
   .actions .primary { padding: 10px 13px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; color: var(--text); }

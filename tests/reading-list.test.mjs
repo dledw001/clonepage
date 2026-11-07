@@ -14,11 +14,11 @@ const declarations = tree.statements.filter(node => !ts.isImportDeclaration(node
 const body = declarations.map(node => node.getText(tree)).join('\n');
 const expose = `
 return {
-    refresh, patch, remove, retryIndexing, save, startEditing, saveTitle,
+    refresh, patch, remove, retryIndexing, save, uploadDocument, startEditing, saveTitle,
     seed(value) { articles = value; },
     setForm(nextUrl, nextTitle) { url = nextUrl; title = nextTitle; },
     setDraft(value) { titleDraft = value; },
-    state() { return { articles, busyIds, error, loaded, saving, editingId }; }
+    state() { return { articles, busyIds, error, loaded, saving, editingId, uploading, tab, search }; }
 };`;
 const javascript = ts.transpileModule(body + expose, {
     compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.None }
@@ -197,4 +197,61 @@ test('completing an earlier title save does not close another article editor', a
     pending.resolve(response(article('a', { title: 'Renamed' })));
     await save;
     assert.equal(c.state().editingId, 'b');
+});
+
+
+test('PDF upload sends original bytes and encoded metadata, then shows the queued document', async () => {
+    const file = new File(['%PDF-1.4 example'], 'résumé.pdf', { type: 'application/pdf' });
+    let uploaded = false;
+    const saved = article('uploaded', { source_kind: 'upload', index_status: 'pending' });
+    const c = createComponent(async (url, options) => {
+        if (options?.method === 'POST') {
+            uploaded = true;
+            assert.equal(url, '/api/reading/upload');
+            assert.equal(options.body, file);
+            assert.equal(decodeURIComponent(options.headers['X-Filename']), 'résumé.pdf');
+            assert.equal(decodeURIComponent(options.headers['X-Document-Title']), 'My title');
+            assert.equal(options.headers['Content-Type'], 'application/pdf');
+            return response(saved, 201);
+        }
+        return response([saved]);
+    });
+    assert.equal(await c.uploadDocument(file, ' My title '), '');
+    await settle();
+    assert.equal(uploaded, true);
+    assert.equal(c.state().articles[0].id, 'uploaded');
+    assert.equal(c.state().saving, false);
+    assert.equal(c.state().tab, 'queue');
+});
+
+test('invalid and oversized PDFs are rejected before any upload starts', async () => {
+    let calls = 0;
+    const c = createComponent(async () => { calls++; throw Error(); });
+    assert.match(await c.uploadDocument(new File(['x'], 'notes.txt'), ''), /PDF/);
+    assert.match(await c.uploadDocument(new File([], 'empty.pdf'), ''), /empty/);
+    assert.match(await c.uploadDocument({ name: 'large.pdf', size: 25 * 1024 * 1024 + 1 }, ''), /25 MB/);
+    assert.equal(calls, 0);
+    assert.equal(c.state().saving, false);
+});
+
+test('failed PDF uploads keep the current list and return the server error for retry', async () => {
+    const c = createComponent(async () => response({ detail: 'This PDF is already saved.' }, 409));
+    c.seed([article('existing')]);
+    assert.match(await c.uploadDocument(new File(['%PDF-1.4'], 'file.pdf'), ''), /already saved/);
+    assert.equal(c.state().articles[0].id, 'existing');
+    assert.equal(c.state().saving, false);
+});
+
+test('a stale list refresh cannot erase a newly uploaded PDF', async () => {
+    const old = deferred();
+    let reads = 0;
+    const saved = article('upload', { source_kind: 'upload' });
+    const c = createComponent((url, options) => options?.method === 'POST'
+        ? Promise.resolve(response(saved, 201)) : ++reads === 1 ? old.promise : Promise.resolve(response([saved])));
+    const refresh = c.refresh();
+    await c.uploadDocument(new File(['%PDF-1.4'], 'file.pdf'), '');
+    old.resolve(response([]));
+    await refresh;
+    await settle();
+    assert.equal(c.state().articles[0].id, 'upload');
 });

@@ -19,6 +19,7 @@ from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_c
 from shortcuts import initialize_shortcuts, router as shortcuts_router
 from dsm import DSMSessions, router as dsm_router
 from dsm_services import initialize_services
+from document_uploads import UPLOAD_COLUMNS, initialize_uploads, router as uploads_router
 
 import re
 
@@ -28,7 +29,7 @@ DB_PATH = Path(
 
 ARTICLE_COLUMNS = (
     "id, title, url, is_read, saved_at, archived_at, "
-    "index_status, indexed_at, index_error, index_attempts, index_retry_at, " + COPY_COLUMNS
+    "index_status, indexed_at, index_error, index_attempts, index_retry_at, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS
 )
 
 
@@ -209,6 +210,7 @@ async def lifespan(app: FastAPI):
     initialize_search()
     initialize_feeds()
     initialize_saved_copies()
+    initialize_uploads()
     initialize_shortcuts()
     initialize_services()
     app.state.dsm_sessions = DSMSessions()
@@ -246,6 +248,7 @@ app = FastAPI(
 app.include_router(infrastructure_router)
 app.include_router(feeds_router)
 app.include_router(saved_copies_router)
+app.include_router(uploads_router)
 app.include_router(shortcuts_router)
 app.include_router(dsm_router)
 

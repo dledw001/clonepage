@@ -36,7 +36,7 @@ def wait_for_schema():
                 db.execute(check_index_schema_sql)
                 db.execute("SELECT rowid FROM article_fts LIMIT 0")
                 db.execute("SELECT id FROM feed_subscriptions LIMIT 0")
-                db.execute("SELECT copy_status,article_job FROM articles LIMIT 0")
+                db.execute("SELECT copy_status,article_job,source_kind,upload_filename FROM articles LIMIT 0")
             return
         except Exception:
             logging.info("Waiting for database initialization...")
@@ -112,7 +112,10 @@ def process_next() -> bool:
     captured_at = timestamp()
     try:
         # Re-index the stored snapshot without silently recapturing the source.
-        document = extract_article_text(row["url"]) if copy_due or not row["copy_path"] else text_from_saved_copy(row)
+        if row["source_kind"] == "upload":
+            document = text_from_saved_copy(row)
+        else:
+            document = extract_article_text(row["url"]) if copy_due or not row["copy_path"] else text_from_saved_copy(row)
     except Exception as exc:
         # Preserve the existing indexing diagnostic contract while presenting
         # concise capture errors in the saved-copy UI.
