@@ -181,10 +181,15 @@ class DSMServiceTests(unittest.TestCase):
         self.assertEqual(self.creates(),[])
 
     def test_success_creates_assigns_verifies_publishes_and_disconnects(self):
+        self.fake.rules[0]['description']='Clonepage'
+        self.fake.rules[0]['frontend']['fqdn']='clonepage.dledwith.com'
+        template=copy.deepcopy(self.fake.rules[0])
         self.connect();result=self.apply()
         self.assertEqual(result.status_code,200,result.text);self.assertTrue(result.json()['ok'])
         self.assertEqual(result.json()['shortcuts']['items'][-1]['value'],'https://sonarr.dledwith.com')
         entry=json.loads(self.creates()[0]['entry'])
+        self.assertEqual(entry['description'],'Sonarr')
+        self.assertEqual(self.fake.rules[0],template)
         self.assertEqual(entry['frontend']['acl'],'tailnet-profile');self.assertEqual(entry['frontend']['fqdn'],'sonarr.dledwith.com')
         self.assertEqual(entry['backend'],{'fqdn':'10.0.0.149','port':8989,'protocol':0})
         self.verify.assert_awaited_once_with('sonarr.dledwith.com', '10.0.0.149')
@@ -211,6 +216,35 @@ class DSMServiceTests(unittest.TestCase):
         self.connect();result=self.apply().json();self.assertFalse(result['ok']);self.assertEqual(result['stage'],'creating_rule')
         self.fake.create_timeout=False
         self.connect();self.assertTrue(self.apply().json()['ok']);self.assertEqual(len(self.creates()),1)
+
+    def test_lost_create_response_with_legacy_prefix_is_reconciled_without_renaming(self):
+        self.fake.create_timeout=True
+        self.connect();result=self.apply().json()
+        self.assertFalse(result['ok']);self.assertEqual(result['stage'],'creating_rule')
+        self.assertIsNone(services.operation('sonarr.dledwith.com')['rule_id'])
+        # Simulate the rule an older Clonepage version left behind after a timeout.
+        self.fake.rules[-1]['description']='Clonepage: Sonarr'
+        self.fake.certs[0]['services'][-1]['display_name']='Clonepage: Sonarr'
+        self.fake.create_timeout=False
+        self.connect();self.assertTrue(self.apply().json()['ok'])
+        self.assertEqual(len(self.creates()),1)
+        self.assertEqual(self.fake.rules[-1]['description'],'Clonepage: Sonarr')
+
+    def test_pending_create_does_not_adopt_a_rule_with_an_unexpected_name(self):
+        self.fake.create_timeout=True
+        self.connect();self.assertFalse(self.apply().json()['ok'])
+        self.fake.rules[-1]['description']='Different service'
+        self.fake.create_timeout=False
+        self.connect();response=self.post('preview',self.draft())
+        self.assertEqual(response.status_code,409);self.assertEqual(len(self.creates()),1)
+        self.assertEqual(self.fake.rules[-1]['description'],'Different service')
+
+    def test_retry_after_manual_rule_rename_preserves_the_name_and_rule(self):
+        self.connect();self.assertTrue(self.apply().json()['ok'])
+        self.fake.rules[-1]['description']='My Sonarr'
+        self.connect();self.assertTrue(self.apply().json()['ok'])
+        self.assertEqual(len(self.creates()),1)
+        self.assertEqual(self.fake.rules[-1]['description'],'My Sonarr')
 
     def test_template_changes_after_review_block_creation_and_close_the_connection(self):
         self.connect();preview=self.preview();self.fake.rules[0]['frontend']['acl']='different-profile'

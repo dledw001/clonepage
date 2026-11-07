@@ -149,7 +149,11 @@ def check_existing(rules, settings, hostname, previous):
         return None
     if len(matches) == 1 and previous and rule_matches(matches[0], settings, hostname):
         rule = matches[0]
-        if rule_id(rule) == previous["rule_id"] or (not previous["rule_id"] and previous["stage"] == "creating_rule" and rule.get("description") == f"Clonepage: {settings['name']}"):
+        known_rule = rule_id(rule) == previous["rule_id"]
+        # An interrupted create may predate the switch to plain service names.
+        recovering_rule = (not previous["rule_id"] and previous["stage"] == "creating_rule"
+                           and rule.get("description") in (settings["name"], f"Clonepage: {settings['name']}"))
+        if known_rule or recovering_rule:
             return rule
     raise DSMError("A DSM rule already uses this hostname. Existing rules will not be overwritten.", 409)
 
@@ -346,7 +350,7 @@ async def provision(item: ApplyInput, request: Request, response: Response):
                                (uuid4().hex, hostname, json.dumps(settings, sort_keys=True), datetime.now(timezone.utc).isoformat()))
             if not existing:
                 parts = urlsplit(settings["upstream"])
-                entry["description"] = f"Clonepage: {settings['name']}"
+                entry["description"] = settings["name"]
                 entry["frontend"]["fqdn"] = hostname
                 entry["backend"] = {"fqdn": parts.hostname, "port": parts.port or (443 if parts.scheme == "https" else 80), "protocol": 1 if parts.scheme == "https" else 0}
                 stage = "creating_rule"; update_operation(hostname, stage, error=None)
