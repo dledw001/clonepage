@@ -31,3 +31,7 @@ sudo docker compose up -d --no-build --force-recreate
 ```
 
 The fallback rebuilds all three images before recreating containers. It assumes this installation's Compose project name (`clonepage`). Never start a deployment after a failed build; resolve the failure first so all services use the intended revision.
+
+## Automatic deployment
+
+For scheduled updates through DSM Task Scheduler, see [Automatic NAS deployments](automatic-deployments.md).
