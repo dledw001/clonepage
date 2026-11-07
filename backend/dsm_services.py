@@ -4,8 +4,11 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 import re
 import secrets
+import socket
+import ssl
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -17,6 +20,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dsm import CERT_SERVICE, PROXY, DSMError, manager, no_store, router
 from shortcuts import MAX_SHORTCUTS, ShortcutFields, changed, snapshot, values
+
+
+logger = logging.getLogger(__name__)
 
 
 def database():
@@ -261,14 +267,42 @@ async def assign_certificate(client, uuid, cert_id):
     raise DSMError("The new rule's certificate service could not be identified safely. Review it in DSM, then reconnect to resume.")
 
 
-async def verify_https(hostname):
+def https_failure_reason(error):
+    # Inspect types only: raw errors/responses can contain sensitive data.
+    cause = error
+    seen = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        if isinstance(cause, ssl.SSLCertVerificationError):
+            return "certificate", "The service's HTTPS certificate could not be verified. Check its certificate assignment and chain."
+        if isinstance(cause, socket.gaierror):
+            return "dns", "The service's HTTPS address could not be resolved. Check DNS or DSM_PROXY_IP."
+        cause = cause.__cause__ or cause.__context__
+    if isinstance(error, httpx.TimeoutException):
+        return "timeout", "The HTTPS check timed out. Check the NAS connection and reverse-proxy destination."
+    if isinstance(error, httpx.ConnectError):
+        return "connection", "The HTTPS check could not connect to the NAS. Check the LAN address and HTTPS listener."
+    return "http", "The HTTPS check failed while communicating with the service. Check the reverse-proxy destination."
+
+
+async def verify_https(hostname, proxy_ip=None):
+    # Connect to the NAS directly, but route and verify TLS for the service hostname.
+    # This is a server-configured address; the browser cannot choose the check target.
+    url = httpx.URL(scheme="https", host=proxy_ip or hostname, path="/")
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(8, connect=4), follow_redirects=False, trust_env=False) as client:
-            async with client.stream("GET", f"https://{hostname}/") as response:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(8, connect=4), follow_redirects=False,
+                                     trust_env=False, verify=True) as client:
+            async with client.stream("GET", url, headers={"Host": hostname},
+                                     extensions={"sni_hostname": hostname}) as response:
                 if response.status_code >= 500:
+                    logger.warning("Service HTTPS check failed: hostname=%s connect_host=%s reason=upstream status=%s",
+                                   hostname, proxy_ip or hostname, response.status_code)
                     raise DSMError("The HTTPS route is present but the service returned a server error. Check the destination, then reconnect to resume.")
-    except httpx.HTTPError:
-        raise DSMError("HTTPS could not be verified from Clonepage. Check DNS, the certificate, and the destination; reconnect to resume.") from None
+    except httpx.HTTPError as error:
+        reason, detail = https_failure_reason(error)
+        logger.warning("Service HTTPS check failed: hostname=%s connect_host=%s reason=%s error_type=%s",
+                       hostname, proxy_ip or hostname, reason, type(error).__name__)
+        raise DSMError(f"{detail} Reconnect to resume.") from None
 
 
 def publish_shortcut(hostname, settings):
@@ -327,7 +361,7 @@ async def provision(item: ApplyInput, request: Request, response: Response):
             stage = "rule_created"; update_operation(hostname, stage, rule_id=uuid, error=None)
             await assign_certificate(session.client, uuid, settings["certificate_id"])
             stage = "certificate_assigned"; update_operation(hostname, stage, error=None)
-            await verify_https(hostname)
+            await verify_https(hostname, sessions.config.proxy_ip)
             stage = "https_verified"; update_operation(hostname, stage, error=None)
             shortcut_id, shortcuts = publish_shortcut(hostname, settings)
             update_operation(hostname, "ready", shortcut_id=shortcut_id, error=None)

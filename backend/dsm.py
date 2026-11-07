@@ -8,6 +8,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 import httpx
@@ -30,6 +31,7 @@ class DSMConfig:
     url: str
     domain: str
     upstream_hosts: frozenset[str]
+    proxy_ip: str | None = None
 
     @classmethod
     def from_env(cls):
@@ -43,7 +45,13 @@ class DSMConfig:
                 raise ValueError("DSM_URL and CLONEPAGE_ORIGIN must be HTTPS origins without paths or credentials.")
         if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", domain) or ".." in domain or not hosts:
             raise ValueError("Configure a service domain and allowed upstream hosts.")
-        return cls(origin, url, domain, hosts)
+        proxy_ip = os.getenv("DSM_PROXY_IP", "").strip()
+        if proxy_ip:
+            try:
+                proxy_ip = str(ip_address(proxy_ip))
+            except ValueError:
+                raise ValueError("DSM_PROXY_IP must be an IPv4 or IPv6 address, or empty to use DNS.") from None
+        return cls(origin, url, domain, hosts, proxy_ip or None)
 
 
 class DSMError(Exception):

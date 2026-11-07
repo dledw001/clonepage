@@ -17,7 +17,7 @@ import dsm
 import dsm_services as services
 
 ORIGIN = 'https://clonepage.dledwith.com'
-CONFIG = dsm.DSMConfig(ORIGIN, 'https://dsm.dledwith.com', 'dledwith.com', frozenset({'10.0.0.149','localhost','127.0.0.1'}))
+CONFIG = dsm.DSMConfig(ORIGIN, 'https://dsm.dledwith.com', 'dledwith.com', frozenset({'10.0.0.149','localhost','127.0.0.1'}), '10.0.0.149')
 SID = 'private-dsm-session-canary'
 TOKEN = 'private-dsm-token-canary'
 PASSWORD = 'private-password-canary'
@@ -187,7 +187,7 @@ class DSMServiceTests(unittest.TestCase):
         entry=json.loads(self.creates()[0]['entry'])
         self.assertEqual(entry['frontend']['acl'],'tailnet-profile');self.assertEqual(entry['frontend']['fqdn'],'sonarr.dledwith.com')
         self.assertEqual(entry['backend'],{'fqdn':'10.0.0.149','port':8989,'protocol':0})
-        self.verify.assert_awaited_once_with('sonarr.dledwith.com')
+        self.verify.assert_awaited_once_with('sonarr.dledwith.com', '10.0.0.149')
         self.assertFalse(self.client.get('/api/dsm/connection').json()['connected'])
         self.assertTrue(any(params['api']==dsm.CERT_SERVICE for _,_,params in self.fake.calls))
         self.assertEqual(self.fake.calls[-1][2]['method'],'logout')

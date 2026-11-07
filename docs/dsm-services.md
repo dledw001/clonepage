@@ -9,6 +9,7 @@ The defaults match this installation:
 ```dotenv
 CLONEPAGE_ORIGIN=https://clonepage.dledwith.com
 DSM_URL=https://dsm.dledwith.com
+DSM_PROXY_IP=10.0.0.149
 DSM_SERVICE_DOMAIN=dledwith.com
 DSM_UPSTREAM_HOSTS=10.0.0.149,127.0.0.1,localhost
 ```
@@ -16,6 +17,8 @@ DSM_UPSTREAM_HOSTS=10.0.0.149,127.0.0.1,localhost
 These are connection settings, not credentials. Set them in `.env` if different; `.env.example` documents the keys. The browser must use the exact configured HTTPS origin. There is no HTTP/insecure-certificate override for real DSM connections.
 
 The API container maps `dsm.dledwith.com` to the NAS LAN address `10.0.0.149` through Compose `extra_hosts`. This avoids the container trying to reach DSM through the NAS's own Tailscale address, which timed out on this installation. The URL remains `https://dsm.dledwith.com`, so the HTTPS hostname and certificate verification are preserved. If the DSM hostname or NAS LAN address changes, update that mapping in `docker-compose.yml` as well.
+
+Service HTTPS checks use `DSM_PROXY_IP` to reach the same NAS HTTPS listener directly over the LAN. Each check still sends the service hostname in the HTTP Host header and TLS SNI and verifies the certificate against that hostname. This covers new services without adding a Docker hostname mapping for each one. It verifies the NAS route and certificate; client DNS/Tailscale access must still be configured separately. Set `DSM_PROXY_IP` to an empty value to use normal DNS instead.
 
 After changing this mapping, recreate the API container (`sudo docker compose up -d --force-recreate api`). A plain container restart does not apply Compose configuration changes.
 
@@ -59,7 +62,7 @@ Progress metadata lives in `service_operations` in the normal SQLite database. I
 
 A failure after rule creation deliberately leaves the new rule for inspection/resumption. Reconnect, keep the same fields, and review again; **Resume setup** reconciles the known rule and continues certificate/HTTPS/shortcut work. A lost create response is reconciled before another create is attempted. If the rule or its access settings have been changed externally, setup stops for manual review. It never silently replaces a foreign rule or binds a certificate to an unrelated DSM service.
 
-HTTPS verification is performed from the API container, with a new client that carries no DSM session credentials, follows no redirects, and validates the certificate normally. Protected-service responses such as 401/403 are acceptable; TLS/network failures and server errors keep the setup unfinished.
+HTTPS verification is performed from the API container, with a new client that carries no DSM session credentials, follows no redirects, and validates the certificate normally. Protected-service responses such as 401/403 are acceptable; TLS/network failures and server errors keep the setup unfinished. These failures are logged with the service hostname, connection target, and a safe reason (timeout, DNS, certificate, connection, HTTP, or upstream status); response bodies and authentication values are excluded. Inspect them with `sudo docker compose logs --tail=100 api`.
 
 ## Validation limits and references
 
