@@ -33,6 +33,7 @@
         copy_warning: string | null;
         copy_retry_at: string | null;
         copy_is_legacy: boolean;
+        reading_progress?: { page: number; page_count: number } | null;
         snippet?: string | null;
     };
 
@@ -666,7 +667,7 @@
                         <small>{article.source_kind === 'upload' ? `Uploaded PDF · ${article.upload_filename ?? 'Document'}` : hostname(article.url)}</small>
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
-                                <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>Read saved copy</a>
+                                <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : 'Read saved copy'}</a>
                                 <a href={`/api/reading/${article.id}/copy/download`}>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
                             {/if}
                             {#if article.copy_status === 'pending' || article.copy_status === 'processing'}

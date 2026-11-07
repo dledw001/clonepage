@@ -20,6 +20,7 @@ from shortcuts import initialize_shortcuts, router as shortcuts_router
 from dsm import DSMSessions, router as dsm_router
 from dsm_services import initialize_services
 from document_uploads import UPLOAD_COLUMNS, initialize_uploads, router as uploads_router
+from pdf_progress import PROGRESS_COLUMNS, PROGRESS_NAMES, initialize_pdf_progress, progress_for, router as progress_router
 
 import re
 
@@ -29,7 +30,7 @@ DB_PATH = Path(
 
 ARTICLE_COLUMNS = (
     "id, title, url, is_read, saved_at, archived_at, "
-    "index_status, indexed_at, index_error, index_attempts, index_retry_at, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS
+    "index_status, indexed_at, index_error, index_attempts, index_retry_at, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS
 )
 
 
@@ -211,6 +212,7 @@ async def lifespan(app: FastAPI):
     initialize_feeds()
     initialize_saved_copies()
     initialize_uploads()
+    initialize_pdf_progress()
     initialize_shortcuts()
     initialize_services()
     app.state.dsm_sessions = DSMSessions()
@@ -249,6 +251,7 @@ app.include_router(infrastructure_router)
 app.include_router(feeds_router)
 app.include_router(saved_copies_router)
 app.include_router(uploads_router)
+app.include_router(progress_router)
 app.include_router(shortcuts_router)
 app.include_router(dsm_router)
 
@@ -276,6 +279,9 @@ class ArticleUpdate(BaseModel):
 
 def serialize(row):
     article = dict(row)
+    article["reading_progress"] = progress_for(article)
+    for name in PROGRESS_NAMES:
+        article.pop(name, None)
     article["is_read"] = bool(article["is_read"])
     article["copy_available"] = bool(article.get("copy_saved_at"))
     article["copy_is_legacy"] = bool(article.get("copy_is_legacy"))

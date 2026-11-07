@@ -80,12 +80,13 @@ def persist_upload(data, filename, title):
             if existing:
                 # language=SQL
                 restore_upload_sql = """
-                UPDATE articles SET copy_status='ready', copy_path=?, copy_saved_at=?, copy_format='pdf', copy_size=?,
+                UPDATE articles SET pdf_progress_version=CASE WHEN pdf_progress_version=copy_saved_at THEN ? ELSE pdf_progress_version END,
+                    copy_status='ready', copy_path=?, copy_saved_at=?, copy_format='pdf', copy_size=?,
                     copy_error=NULL, copy_retry_at=NULL, copy_attempts=0, copy_job=NULL,
                     index_status='pending', index_error=NULL, index_retry_at=NULL, index_attempts=0, article_job=NULL
                 WHERE id=?
                 """
-                db.execute(restore_upload_sql, (candidate.path, saved_at, candidate.size, article_id))
+                db.execute(restore_upload_sql, (saved_at, candidate.path, saved_at, candidate.size, article_id))
             else:
                 # The local reader route is the canonical address; no public source is invented.
                 # language=SQL

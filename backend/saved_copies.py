@@ -345,9 +345,11 @@ def refresh_copy(article_id: str):
     return get_copy(article_id)
 
 
-def serve_copy(article_id, download, theme=None):
+def serve_copy(article_id, download, theme=None, version=None):
     row = copy_row(article_id)
     for attempt in range(2):
+        if version is not None and version != row["copy_saved_at"]:
+            raise HTTPException(409, "The saved copy changed. Reopen the reader to load the current version.")
         if not row["copy_path"]:
             raise HTTPException(404, "No saved copy is available yet")
         try:
@@ -370,8 +372,8 @@ def serve_copy(article_id, download, theme=None):
 
 
 @router.get("/{article_id}/copy/content")
-def view_copy(article_id: str, theme: Literal['light', 'dark'] | None = Query(None)):
-    return serve_copy(article_id, False, theme)
+def view_copy(article_id: str, theme: Literal['light', 'dark'] | None = Query(None), version: str | None = Query(None, max_length=100)):
+    return serve_copy(article_id, False, theme, version)
 
 
 @router.get("/{article_id}/copy/download")

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import PDFReader from './PDFReader.svelte';
   import { ArrowLeft, ArrowUpRight, Download, RefreshCw } from '@lucide/svelte';
 
   let { articleId, theme, onback }: { articleId: string; theme: 'light' | 'dark'; onback?: (event: MouseEvent) => void } = $props();
@@ -103,8 +104,7 @@
   {#if info?.copy_warning}<p class="notice">{info.copy_warning}</p>{/if}
   {#if info?.copy_available}
     {#if info.copy_format === 'pdf'}
-      <iframe class="pdf-frame" title="Saved PDF" src={contentUrl}></iframe>
-      <p class="hint">If your browser does not display the PDF, use Download PDF to open the saved file.</p>
+      {#key info.copy_saved_at}<PDFReader {articleId} version={info.copy_saved_at ?? ''} url={contentUrl} />{/key}
     {:else}
       <iframe bind:this={frame} class="reader-frame" title="Saved article content" src={contentUrl} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload={fitFrame} style:height={`${frameHeight}px`}></iframe>
     {/if}
@@ -128,7 +128,6 @@
   .notice { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px; font-size: 12px; color: var(--warning); line-height: 1.8; overflow-wrap: anywhere; }
   .notice button { background: transparent; border: 0; color: var(--highlight); cursor: pointer; font: inherit; margin-left: 12px; }
   iframe { width: 100%; display: block; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-  .pdf-frame { height: 78vh; min-height: 500px; }
   .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: 13px; }
   @media(max-width:540px) { .saved-article { margin-top: 32px; } h1 { font-size: 27px; } }
 </style>
