@@ -3,27 +3,27 @@
     {
       "key": "HardDrive",
       "label": "Hard drive",
-      "keywords": "nas storage disk"
+      "keywords": "nas storage disk synology truenas"
     },
     {
       "key": "HardDriveDownload",
       "label": "Drive download",
-      "keywords": "torrent download storage"
+      "keywords": "qbit qbittorrent bittorrent torrent transmission deluge download storage"
     },
     {
       "key": "Server",
       "label": "Server",
-      "keywords": "hosting nas"
+      "keywords": "hosting nas synology dsm proxmox unraid truenas"
     },
     {
       "key": "Network",
       "label": "Network",
-      "keywords": "tailscale vpn"
+      "keywords": "tailscale vpn wireguard openvpn networking"
     },
     {
       "key": "Router",
       "label": "Router",
-      "keywords": "wifi internet"
+      "keywords": "wifi internet unifi opnsense pfsense networking"
     },
     {
       "key": "Wifi",
@@ -33,7 +33,7 @@
     {
       "key": "Cloud",
       "label": "Cloud",
-      "keywords": "cloudflare hosting"
+      "keywords": "cloudflare hosting nextcloud cloud storage"
     },
     {
       "key": "Globe",
@@ -48,22 +48,22 @@
     {
       "key": "LockKeyhole",
       "label": "Lock",
-      "keywords": "vault passwords security"
+      "keywords": "vault passwords security vaultwarden bitwarden"
     },
     {
       "key": "Shield",
       "label": "Shield",
-      "keywords": "security dns protection"
+      "keywords": "security dns protection pihole pi-hole pi hole adguard blocking"
     },
     {
       "key": "KeyRound",
       "label": "Key",
-      "keywords": "password authentication"
+      "keywords": "password authentication vaultwarden bitwarden authentik authelia"
     },
     {
       "key": "GitBranch",
       "label": "Git branch",
-      "keywords": "github code repositories"
+      "keywords": "github gitlab gitea forgejo code repositories"
     },
     {
       "key": "Code",
@@ -78,7 +78,7 @@
     {
       "key": "Download",
       "label": "Download",
-      "keywords": "files torrent"
+      "keywords": "files torrent qbittorrent transmission deluge sabnzbd nzbget usenet"
     },
     {
       "key": "Upload",
@@ -88,27 +88,27 @@
     {
       "key": "Folder",
       "label": "Folder",
-      "keywords": "files storage"
+      "keywords": "files storage filebrowser synology drive"
     },
     {
       "key": "FileText",
       "label": "Document",
-      "keywords": "text notes"
+      "keywords": "text notes pdf documents paperless paperless-ngx"
     },
     {
       "key": "NotebookPen",
       "label": "Notebook",
-      "keywords": "notes writing"
+      "keywords": "notes writing obsidian joplin memos"
     },
     {
       "key": "Bookmark",
       "label": "Bookmark",
-      "keywords": "reading saved"
+      "keywords": "reading saved wallabag linkding bookmarks"
     },
     {
       "key": "Rss",
       "label": "RSS",
-      "keywords": "feeds news"
+      "keywords": "feeds news freshrss miniflux rss reader"
     },
     {
       "key": "Mail",
@@ -123,22 +123,22 @@
     {
       "key": "Activity",
       "label": "Activity",
-      "keywords": "monitoring health metrics"
+      "keywords": "monitoring health metrics uptime kuma uptimekuma netdata glances"
     },
     {
       "key": "Gauge",
       "label": "Gauge",
-      "keywords": "dashboard performance"
+      "keywords": "dashboard performance grafana monitoring"
     },
     {
       "key": "ChartNoAxesCombined",
       "label": "Chart",
-      "keywords": "statistics analytics"
+      "keywords": "statistics analytics grafana prometheus"
     },
     {
       "key": "Database",
       "label": "Database",
-      "keywords": "data sql"
+      "keywords": "data sql sqlite postgres postgresql mariadb mysql redis"
     },
     {
       "key": "Monitor",
@@ -148,27 +148,27 @@
     {
       "key": "House",
       "label": "Home",
-      "keywords": "homepage house"
+      "keywords": "homepage house home assistant homeassistant hass dashboard"
     },
     {
       "key": "Film",
       "label": "Film",
-      "keywords": "movies media plex jellyfin"
+      "keywords": "movies media plex jellyfin emby radarr"
     },
     {
       "key": "Tv",
       "label": "Television",
-      "keywords": "shows media"
+      "keywords": "shows media television sonarr plex jellyfin emby"
     },
     {
       "key": "Music",
       "label": "Music",
-      "keywords": "audio streaming"
+      "keywords": "audio streaming navidrome ampache spotify music"
     },
     {
       "key": "Image",
       "label": "Image",
-      "keywords": "photos gallery"
+      "keywords": "photos gallery immich photoprism synology photos"
     },
     {
       "key": "Gamepad2",
@@ -183,22 +183,142 @@
     {
       "key": "Search",
       "label": "Search",
-      "keywords": "lookup find"
+      "keywords": "lookup find prowlarr jackett searxng indexers"
     },
     {
       "key": "Cpu",
       "label": "CPU",
-      "keywords": "processor hardware"
+      "keywords": "processor hardware nas temps temperature monitoring"
     },
     {
       "key": "Container",
       "label": "Container",
-      "keywords": "docker containers"
+      "keywords": "docker containers portainer dockge"
     },
     {
       "key": "BookOpen",
       "label": "Book",
-      "keywords": "reading library"
+      "keywords": "reading library calibre kavita audiobooks audiobookshelf"
+    },
+    {
+      "key": "ShieldCheck",
+      "label": "Shield check",
+      "keywords": "security protection dns blocking pihole pi-hole pi hole adguard"
+    },
+    {
+      "key": "CirclePlay",
+      "label": "Play",
+      "keywords": "playback video streaming plex jellyfin emby media"
+    },
+    {
+      "key": "Clapperboard",
+      "label": "Clapperboard",
+      "keywords": "movies cinema media radarr plex jellyfin"
+    },
+    {
+      "key": "Radio",
+      "label": "Radio",
+      "keywords": "radio music streaming podcasts navidrome"
+    },
+    {
+      "key": "Camera",
+      "label": "Camera",
+      "keywords": "surveillance security cameras frigate synology surveillance station"
+    },
+    {
+      "key": "Wrench",
+      "label": "Wrench",
+      "keywords": "administration maintenance tools utilities"
+    },
+    {
+      "key": "Cable",
+      "label": "Cable",
+      "keywords": "network ethernet lan switch unifi networking"
+    },
+    {
+      "key": "Plug",
+      "label": "Plug",
+      "keywords": "power electricity ups apc nut energy"
+    },
+    {
+      "key": "HardDriveUpload",
+      "label": "Drive backup",
+      "keywords": "backup upload storage synology hyper backup restic duplicati"
+    },
+    {
+      "key": "Archive",
+      "label": "Archive",
+      "keywords": "backup archives storage borg restic duplicati"
+    },
+    {
+      "key": "ServerCog",
+      "label": "Server settings",
+      "keywords": "server administration nas synology dsm proxmox unraid"
+    },
+    {
+      "key": "FolderSync",
+      "label": "Folder sync",
+      "keywords": "files synchronization syncthing nextcloud synology drive"
+    },
+    {
+      "key": "Headphones",
+      "label": "Headphones",
+      "keywords": "audio music audiobooks audiobookshelf navidrome"
+    },
+    {
+      "key": "Mic",
+      "label": "Microphone",
+      "keywords": "podcasts recording audio voice mumble"
+    },
+    {
+      "key": "Library",
+      "label": "Library",
+      "keywords": "books ebooks media library calibre kavita komga"
+    },
+    {
+      "key": "BookMarked",
+      "label": "Saved book",
+      "keywords": "ebooks reading bookmarks calibre kavita wallabag"
+    },
+    {
+      "key": "FileScan",
+      "label": "Document scan",
+      "keywords": "documents scanner ocr pdf paperless paperless-ngx"
+    },
+    {
+      "key": "StickyNote",
+      "label": "Sticky note",
+      "keywords": "notes memos writing obsidian joplin"
+    },
+    {
+      "key": "ListChecks",
+      "label": "Checklist",
+      "keywords": "tasks todo to-do lists vikunja tasksorg"
+    },
+    {
+      "key": "Bell",
+      "label": "Notifications",
+      "keywords": "notifications alerts ntfy gotify"
+    },
+    {
+      "key": "Bot",
+      "label": "Bot",
+      "keywords": "ai assistant chatbot ollama open webui openwebui"
+    },
+    {
+      "key": "HousePlug",
+      "label": "Smart home",
+      "keywords": "smart home automation home assistant homeassistant hass homebridge"
+    },
+    {
+      "key": "Lightbulb",
+      "label": "Light bulb",
+      "keywords": "lighting smart home hue zigbee zigbee2mqtt home assistant"
+    },
+    {
+      "key": "Workflow",
+      "label": "Workflow",
+      "keywords": "automation workflows integrations n8n node-red nodered"
     }
   ],
   "colors": [
