@@ -23,6 +23,11 @@
   let selected = $state(0);
   let theme = $state<'dark' | 'light'>('dark');
   let toast = $state('');
+
+  $effect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#efeee9' : '#11151b');
+  });
   function routeFromPath(path: string) {
     const reader = /^\/reading\/([A-Za-z0-9_-]{1,80})\/?$/.exec(path);
     return { page: reader ? 'reader' as const : path.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' as const : 'home' as const, articleId: reader?.[1] ?? '' };

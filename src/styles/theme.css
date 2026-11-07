@@ -10,6 +10,16 @@ html, body, #app {
     min-height: 100%;
 }
 
+html {
+    background: #11151b;
+    color-scheme: dark;
+}
+
+html[data-theme="light"] {
+    background: #efeee9;
+    color-scheme: light;
+}
+
 body {
     font-family: 'DM Sans', sans-serif;
 }
@@ -41,6 +51,7 @@ button {
     --chart-6: #d4b5a3;
 
     min-height: 100vh;
+    min-height: 100dvh;
     position: relative;
     isolation: isolate;
     overflow: hidden;
@@ -88,10 +99,18 @@ button {
 }
 
 .page {
+    --page-top: 32px;
+    --page-inline: 48px;
+    --page-bottom: 24px;
     max-width: 1190px;
     min-height: 100vh;
+    min-height: 100dvh;
     margin: auto;
-    padding: 32px 48px 24px;
+    padding: var(--page-top) var(--page-inline) var(--page-bottom);
+    padding-top: calc(var(--page-top) + env(safe-area-inset-top, 0px));
+    padding-right: calc(var(--page-inline) + env(safe-area-inset-right, 0px));
+    padding-bottom: calc(var(--page-bottom) + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(var(--page-inline) + env(safe-area-inset-left, 0px));
     display: flex;
     flex-direction: column;
 }
@@ -482,7 +501,7 @@ footer {
 .toast {
     position: fixed;
     z-index: 20;
-    bottom: 30px;
+    bottom: calc(30px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
@@ -512,7 +531,9 @@ footer {
     .page-navigation { order: 3; width: 100%; justify-content: center; }
     .page-navigation a { flex: 1; justify-content: center; }
     .page {
-        padding: 22px 20px;
+        --page-top: 22px;
+        --page-inline: 20px;
+        --page-bottom: 22px;
     }
 
     .top-caption {
@@ -556,3 +577,19 @@ footer {
 }
 
 .command-status { margin: 10px 13px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+/* Keep touch inputs readable without disabling pinch-to-zoom. */
+@media (hover: none) and (pointer: coarse) {
+    .app :is(input:not([type="color"]):not([type="checkbox"]):not([type="radio"]), select, textarea) {
+        font-size: 16px;
+    }
+
+    .page-navigation a,
+    .top-actions .icon-button {
+        min-height: 44px;
+    }
+
+    .top-actions .icon-button {
+        min-width: 44px;
+    }
+}
