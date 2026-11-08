@@ -62,7 +62,7 @@
 {#if snapshot?.configured || error}
   <section class="container-updates" aria-labelledby="container-updates-title" aria-busy={loading}>
     <header class="section-heading">
-      <div><div class="eyebrow"><Container size={15} />CONTAINERS</div><h2 id="container-updates-title">Container updates</h2><p>{projects.length} project groups · {snapshot?.containers.length ?? 0} containers watched by WUD</p></div>
+      <div><div class="container-eyebrow"><Container size={15} />CONTAINERS</div><h2 id="container-updates-title">Container updates</h2><p>{projects.length} project groups · {snapshot?.containers.length ?? 0} containers watched by WUD</p></div>
       <div class="actions">
         {#if snapshot?.url}<a href={snapshot.url} target="_blank" rel="noopener noreferrer">Open WUD <ArrowUpRight size={13} /></a>{/if}
         <button onclick={refresh} disabled={loading} aria-label="Refresh container update results" title="Read the latest results from WUD"><RefreshCw size={14} /><span>{loading ? 'Refreshing' : 'Refresh'}</span></button>
@@ -112,9 +112,9 @@
 
 <style>
   .container-updates { margin-top: 38px; padding-top: 30px; border-top: 1px solid var(--line); }
-  .section-heading, .actions, .eyebrow, .project-name, .project-status, .container-heading, .filters { display: flex; align-items: center; gap: 12px; }
+  .section-heading, .actions, .container-eyebrow, .project-name, .project-status, .container-heading, .filters { display: flex; align-items: center; gap: 12px; }
   .section-heading { justify-content: space-between; flex-wrap: wrap; margin-bottom: 21px; }
-  .eyebrow { color: var(--highlight); font-size: 9px; letter-spacing: 2px; font-weight: 700; gap: 8px; }
+  .container-eyebrow { justify-content: flex-start; color: var(--highlight); font-size: 9px; letter-spacing: 2px; font-weight: 700; gap: 8px; }
   h2 { margin: 10px 0 7px; font-size: 23px; letter-spacing: -.5px; font-weight: 500; }
   .section-heading p, .footnote, .checked, .reason, .empty { color: var(--muted); font-size: 11px; line-height: 1.65; }
   .section-heading p { margin: 0; }

@@ -215,7 +215,7 @@
   .entry-info > a:hover { color: var(--highlight); }
   .entry-info > a :global(svg) { display: inline; vertical-align: middle; margin-left: 4px; color: var(--muted); }
   .entry-info > small { display: block; color: var(--muted); font-size: 10px; margin-top: 6px; line-height: 1.6; }
-  .entry-info > p { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .entry-info > p { margin: 10px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .entry.read .entry-info > a { color: var(--muted); }
   .entry.read .read-toggle { color: var(--success); }
   .save-entry { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; padding: 6px 0 6px 6px; flex-shrink: 0; }
