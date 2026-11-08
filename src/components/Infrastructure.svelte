@@ -8,6 +8,7 @@
     fetchJson, formatValue, groupDrives, isStale, metricColors, metricReading, ranges, readingAge, sourceTime, summarizeDrives, updateCounterBaseline,
     type CounterBaseline, type Drive, type TemperatureUnit, type ChartSeries, type Metric, type Series, type Snapshot } from '../lib/infrastructure';
 
+  let { monitorFocus = null }: { monitorFocus?: string | null } = $props();
   let snapshot = $state<Snapshot | null>(null);
   let clock = $state(0);
   let receivedAt = $state(0);
@@ -292,7 +293,7 @@
     </section>
     <div class="infra-footnote"><Activity size={13} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><details><summary>Details</summary><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={12} /></a></details></div>
   {/if}
-  <ContainerUpdates revision={historyRevision} />
+  <ContainerUpdates revision={historyRevision} {monitorFocus} />
 </section>
 
 <style>

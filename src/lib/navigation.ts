@@ -43,7 +43,8 @@ export class PageNavigation {
 
   async go(path: string) {
     this.save();
-    if (this.browser.location.pathname !== path) {
+    const currentPath = this.browser.location.pathname + (this.browser.location.search ?? '') + (this.browser.location.hash ?? '');
+    if (currentPath !== path) {
       const fromHome = this.browser.location.pathname === '/' && path.startsWith('/reading/') ? this.current.id : undefined;
       this.current = { id: ++this.nextId, fromHome };
       this.browser.history.pushState({ clonepage: this.current }, '', path);

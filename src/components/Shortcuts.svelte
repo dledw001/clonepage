@@ -1,19 +1,22 @@
 <script lang="ts">
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
   import ServiceSetup from './ServiceSetup.svelte';
   import { ShortcutDrag } from '../lib/shortcut-drag';
-  import type { Shortcut, ShortcutDraft, ShortcutState, ShortcutStore } from '../lib/shortcuts';
+  import { groupShortcuts, orderShortcutGroup, type Shortcut, type ShortcutDraft, type ShortcutState, type ShortcutStore } from '../lib/shortcuts';
+  import { fetchJson } from '../lib/infrastructure';
+  import { monitorChoices, monitorKey, monitorSummary, type ContainerSnapshot } from '../lib/container-updates';
 
-  let { data, store, onexecute, active = true }: { data: ShortcutState; store: ShortcutStore; onexecute: (item: Shortcut) => void; active?: boolean } = $props();
+  let { data, store, onexecute, onmonitor, active = true }: { data: ShortcutState; store: ShortcutStore; onexecute: (item: Shortcut) => void;
+    onmonitor?: (event: MouseEvent, path: string) => void; active?: boolean } = $props();
   let managing = $state(false);
   let serviceOpen = $state(false);
   $effect(() => { if (!active) serviceOpen = false; });
   let editorOpen = $state(false);
   let editingId = $state<string | null>(null);
   let draftRevision = 0;
-  const emptyDraft = (): ShortcutDraft => ({ name: '', description: '', aliases: [], icon: 'Link', color: '#a4b9e4', action: 'open', value: '' });
+  const emptyDraft = (): ShortcutDraft => ({ name: '', description: '', aliases: [], icon: 'Link', color: '#a4b9e4', action: 'open', value: '', group: '', monitor: null });
   let draft = $state<ShortcutDraft>(emptyDraft());
   let aliases = $state('');
   let iconSearch = $state('');
@@ -23,9 +26,65 @@
   const PreviewIcon = $derived(shortcutIcon(draft.icon));
   const icons = $derived(shortcutCatalog.icons.filter(icon => `${icon.label} ${icon.key} ${icon.keywords}`.toLowerCase().includes(iconSearch.toLowerCase().trim())));
 
+  const groups = $derived(groupShortcuts(data.items));
+  const arrangedItems = $derived(groups.flatMap(group => group.items));
+  let groupEditing = $state<string | null>(null);
+  let groupDraft = $state('');
+  let groupInput = $state<HTMLInputElement>();
+  let groupRevision = 0;
+  let monitorData = $state<ContainerSnapshot | null>(null);
+  let monitorLoading = $state(false);
+  let monitorError = $state('');
+  let monitorController: AbortController | undefined;
+  let monitorDisposed = false;
+  const choices = $derived(monitorChoices(monitorData));
+  const needsMonitoring = $derived(editorOpen || data.items.some(item => item.monitor));
+
+  async function refreshMonitoring() {
+    if (monitorLoading || monitorDisposed || !active || !needsMonitoring) return;
+    monitorLoading = true;
+    monitorController = new AbortController();
+    try {
+      const result = await fetchJson<ContainerSnapshot>('/api/infrastructure/containers', monitorController.signal);
+      if (!monitorDisposed) { monitorData = result; monitorError = result.error; }
+    } catch {
+      if (!monitorDisposed) monitorError = 'Container monitoring could not be refreshed. Saved links are kept.';
+    } finally {
+      if (!monitorDisposed) monitorLoading = false;
+    }
+  }
+
+  $effect(() => { if (active && needsMonitoring) untrack(() => { void refreshMonitoring(); }); });
+  onMount(() => {
+    const refresh = () => { if (!document.hidden) void refreshMonitoring(); };
+    const timer = setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { monitorDisposed = true; monitorController?.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  });
+
+  function selectMonitor(event: Event) {
+    const key = (event.currentTarget as HTMLSelectElement).value;
+    draft.monitor = choices.find(choice => monitorKey(choice.target) === key)?.target ?? null;
+  }
+
+  function canMove(item: Shortcut, offset: number) {
+    const members = data.items.filter(candidate => (candidate.group ?? '') === (item.group ?? ''));
+    const index = members.findIndex(candidate => candidate.id === item.id) + offset;
+    return index >= 0 && index < members.length;
+  }
+
+  async function editGroup(name: string) { groupEditing = name; groupDraft = name; groupRevision = data.revision; await tick(); groupInput?.focus(); }
+  async function cancelGroup() { groupEditing = null; store.dismissError(); await tick(); addButton?.focus(); }
+  async function saveGroup(event: SubmitEvent) {
+    event.preventDefault();
+    if (groupEditing === null) return;
+    if (await store.renameGroup(groupEditing, groupDraft, groupRevision)) { groupEditing = null; await tick(); addButton?.focus(); }
+    else if (store.state.conflict) groupRevision = store.state.revision;
+  }
+
   let grid = $state<HTMLDivElement>();
   let drag = $state<{ id: string; active: boolean; slot: number | null; x: number; y: number;
-    width: number; height: number; offsetX: number; offsetY: number } | null>(null);
+    width: number; height: number; offsetX: number; offsetY: number; group: string } | null>(null);
   let dragNotice = $state('');
   let gesture: ShortcutDrag | null = null;
   let captured: HTMLButtonElement | null = null;
@@ -43,7 +102,7 @@
 
   function updateDrag(pointerId: number, x: number, y: number) {
     if (!gesture || !drag || pointerId !== gesture.pointerId) return;
-    const cards = Array.from(grid?.querySelectorAll<HTMLElement>('[data-shortcut-id]') ?? []).map(card => card.getBoundingClientRect());
+    const cards = Array.from(grid?.querySelectorAll<HTMLElement>('[data-shortcut-id]') ?? []).filter(card => gesture!.ids.includes(card.dataset.shortcutId ?? '')).map(card => card.getBoundingClientRect());
     gesture.move(pointerId, x, y, cards);
     drag = { ...drag, x, y, active: gesture.active, slot: gesture.slot };
   }
@@ -61,14 +120,15 @@
   }
 
   function startDrag(event: PointerEvent, item: Shortcut) {
-    if (event.button !== 0 || !event.isPrimary || data.busy || editorOpen || serviceOpen || gesture) return;
+    if (event.button !== 0 || !event.isPrimary || data.busy || editorOpen || serviceOpen || groupEditing !== null || gesture) return;
     const handle = event.currentTarget as HTMLButtonElement;
     const card = handle.closest<HTMLElement>('[data-shortcut-id]');
     if (!card) return;
     event.preventDefault();
     const bounds = card.getBoundingClientRect();
-    gesture = new ShortcutDrag(item.id, event.pointerId, data.revision, data.items.map(item => item.id), event.clientX, event.clientY);
-    drag = { id: item.id, active: false, slot: null, x: event.clientX, y: event.clientY,
+    const group = item.group ?? '';
+    gesture = new ShortcutDrag(item.id, event.pointerId, data.revision, data.items.filter(item => (item.group ?? '') === group).map(item => item.id), event.clientX, event.clientY);
+    drag = { group, id: item.id, active: false, slot: null, x: event.clientX, y: event.clientY,
       width: bounds.width, height: bounds.height, offsetX: event.clientX - bounds.left, offsetY: event.clientY - bounds.top };
     dragNotice = ''; deleting = null;
     captured = handle; handle.focus({ preventScroll: true }); handle.setPointerCapture(event.pointerId);
@@ -84,7 +144,9 @@
   async function endDrag(event: PointerEvent) {
     if (event.pointerId !== gesture?.pointerId) return;
     updateDrag(event.pointerId, event.clientX, event.clientY);
-    const order = gesture!.finish(event.pointerId);
+    const partialOrder = gesture!.finish(event.pointerId);
+    const group = drag!.group;
+    const order = partialOrder ? orderShortcutGroup(data.items, group, partialOrder) : null;
     const revision = gesture!.revision;
     cancelDrag();
     if (order) {
@@ -98,7 +160,7 @@
     if (event.key === 'Escape' && gesture) { event.preventDefault(); cancelDrag(); dragNotice = 'Reordering cancelled.'; }
   }
   function handleKey(event: KeyboardEvent, item: Shortcut) {
-    if (gesture || data.busy || editorOpen || serviceOpen) return;
+    if (gesture || data.busy || editorOpen || serviceOpen || groupEditing !== null) return;
     if (['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(event.key)) {
       event.preventDefault();
       void store.move(item.id, event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 1);
@@ -119,7 +181,7 @@
   async function edit(item?: Shortcut) {
     managing = true; editorOpen = true; editingId = item?.id ?? null; deleting = null;
     draftRevision = data.revision;
-    draft = item ? { name: item.name, description: item.description, aliases: [...item.aliases], icon: item.icon, color: item.color, action: item.action, value: item.value } : emptyDraft();
+    draft = item ? { name: item.name, description: item.description, aliases: [...item.aliases], icon: item.icon, color: item.color, action: item.action, value: item.value, group: item.group ?? '', monitor: item.monitor ?? null } : emptyDraft();
     aliases = draft.aliases.join(', '); iconSearch = '';
     await tick(); nameInput?.focus();
   }
@@ -149,17 +211,45 @@
 
 {#snippet cards()}
   {#if data.items.length}
-    <div bind:this={grid} class="shortcut-grid" class:arranging={managing} aria-label="Service shortcuts">
-      {#each data.items as item, index (item.id)}
-        {#if managing}
-          <article class="shortcut-card sortable-card" data-shortcut-id={item.id} style={`--accent:${item.color}`} class:drag-source={drag?.active && drag.id === item.id}
-            class:drop-before={drag?.active && drag.slot === index} class:drop-after={drag?.active && drag.slot === data.items.length && index === data.items.length - 1}>
-            {@render card(item)}
-            <button class="drag-handle" aria-label={`Drag to reorder ${item.name}`} title="Drag to reorder; arrow keys also move this shortcut" disabled={data.busy || editorOpen || serviceOpen}
-              onpointerdown={event => startDrag(event, item)} onlostpointercapture={cancelPointer} onkeydown={event => handleKey(event, item)} onclick={event => event.preventDefault()}><GripVertical size={19} /></button>
-          </article>
-        {:else if item.action === 'open'}<a class="shortcut-card" style={`--accent:${item.color}`} href={item.value} target="_blank" rel="noopener noreferrer" title={item.description || item.name}>{@render card(item)}</a>
-        {:else}<button class="shortcut-card" style={`--accent:${item.color}`} title={item.description || item.name} onclick={() => onexecute(item)}>{@render card(item)}</button>{/if}
+    <div bind:this={grid} class="shortcut-groups" class:grouped={groups.some(group => group.name)} class:arranging={managing}>
+      {#if groupEditing !== null}
+        <form class="group-editor" onsubmit={saveGroup}>
+          <h3>Rename {groupEditing}</h3>
+          <label>Group name<input bind:this={groupInput} bind:value={groupDraft} maxlength="48" aria-label="Group name" disabled={data.busy} /><small>Clear the name to move these shortcuts to Ungrouped.</small></label>
+          <div><button type="button" disabled={data.busy} onclick={cancelGroup}>Cancel</button><button class="editor-primary" disabled={data.busy}>Save group</button></div>
+        </form>
+      {/if}
+      {#each groups as group, groupIndex (group.name)}
+        <section class="shortcut-group" aria-label={group.name || 'Ungrouped shortcuts'}>
+          {#if group.name || groups.length > 1 || managing}
+            <div class="group-heading"><h3>{group.name || 'Ungrouped'}</h3><span>{group.items.length}</span>
+              {#if managing}<div class="group-actions">
+                <button class="small-icon" disabled={groupIndex === 0 || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move group ${group.name || 'Ungrouped'} up`} onclick={() => store.moveGroup(group.name, -1)}><ArrowUp size={14} /></button>
+                <button class="small-icon" disabled={groupIndex === groups.length - 1 || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move group ${group.name || 'Ungrouped'} down`} onclick={() => store.moveGroup(group.name, 1)}><ArrowDown size={14} /></button>
+                {#if group.name}<button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Rename group ${group.name}`} onclick={() => editGroup(group.name)}><Pencil size={14} /></button>{/if}
+              </div>{/if}
+            </div>
+          {/if}
+          <div class="shortcut-grid" aria-label={`${group.name || 'Ungrouped'} shortcuts`}>
+            {#each group.items as item, index (item.id)}
+              {#if managing}
+                <article class="shortcut-card sortable-card" data-shortcut-id={item.id} style={`--accent:${item.color}`} class:drag-source={drag?.active && drag.id === item.id}
+                  class:drop-before={drag?.active && drag.group === group.name && drag.slot === index} class:drop-after={drag?.active && drag.group === group.name && drag.slot === group.items.length && index === group.items.length - 1}>
+                  {@render card(item)}
+                  <button class="drag-handle" aria-label={`Drag to reorder ${item.name}`} title="Drag to reorder within this group; arrow keys also move this shortcut" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null}
+                    onpointerdown={event => startDrag(event, item)} onlostpointercapture={cancelPointer} onkeydown={event => handleKey(event, item)} onclick={event => event.preventDefault()}><GripVertical size={19} /></button>
+                </article>
+              {:else}
+                {@const status = monitorSummary(item.monitor, monitorData, Boolean(monitorError))}
+                <div class="shortcut-tile">
+                  {#if item.action === 'open'}<a class="shortcut-card" style={`--accent:${item.color}`} href={item.value} target="_blank" rel="noopener noreferrer" title={item.description || item.name}>{@render card(item)}</a>
+                  {:else}<button class="shortcut-card" style={`--accent:${item.color}`} title={item.description || item.name} onclick={() => onexecute(item)}>{@render card(item)}</button>{/if}
+                  {#if status && status.state !== 'current' && (monitorData || monitorError)}<a class="monitor-badge" class:unknown={status.state === 'unknown'} href={status.href} title={status.detail} aria-label={`View ${item.name} container updates: ${status.detail}`} onclick={event => onmonitor?.(event, status.href)}>{status.label}</a>{/if}
+                </div>
+              {/if}
+            {/each}
+          </div>
+        </section>
       {/each}
     </div>
   {/if}
@@ -169,7 +259,7 @@
   <div class="section-header">
     <span>YOUR PLACES</span>
     <div class="shortcut-heading-actions"><span class="section-count">{data.loaded ? String(data.items.length).padStart(2, '0') : '—'} SHORTCUTS</span>
-      <button class="manage-button" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || drag !== null}><Settings2 size={14} />{managing ? 'Done' : 'Manage shortcuts'}</button>
+      <button class="manage-button" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={14} />{managing ? 'Done' : 'Manage shortcuts'}</button>
     </div>
   </div>
 
@@ -178,8 +268,8 @@
 
   {#if managing && data.loaded}
     <div class="shortcut-manager">
-      <div class="manager-heading"><div><h2>Your shortcuts</h2><p>Drag the card handles to arrange your places. Changes save across your devices.</p></div>
-        <div class="manager-add-actions"><button class="editor-primary" onclick={() => serviceOpen = true} disabled={data.busy || editorOpen || serviceOpen || drag !== null}><Plus size={15} />Add service</button><button bind:this={addButton} class="editor-primary" onclick={() => edit()} disabled={data.busy || editorOpen || serviceOpen || drag !== null}><Plus size={15} />Add shortcut</button></div>
+      <div class="manager-heading"><div><h2>Your shortcuts</h2><p>Drag cards within a group, or use the group arrows to arrange sections. Changes save across your devices.</p></div>
+        <div class="manager-add-actions"><button class="editor-primary" onclick={() => serviceOpen = true} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Plus size={15} />Add service</button><button bind:this={addButton} class="editor-primary" onclick={() => edit()} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Plus size={15} />Add shortcut</button></div>
       </div>
       {#if serviceOpen}<ServiceSetup onclose={() => serviceOpen = false} onsaved={snapshot => store.accept(snapshot)} />{/if}
       {#if editorOpen}
@@ -189,9 +279,23 @@
             <div class="editor-fields">
               <label>Name<input bind:this={nameInput} bind:value={draft.name} required maxlength="80" placeholder="qBittorrent" /></label>
               <label>Description<input bind:value={draft.description} maxlength="200" placeholder="Torrent client" /></label>
-              <label>Action<select bind:value={draft.action}><option value="open">Open website</option><option value="copy">Copy text</option></select></label>
+              <label>Action<select bind:value={draft.action} onchange={event => { if (event.currentTarget.value === 'copy') draft.monitor = null; }}><option value="open">Open website</option><option value="copy">Copy text</option></select></label>
               {#if draft.action === 'open'}<label>Website URL<input bind:value={draft.value} type="url" required maxlength="4000" placeholder="https://service.example.com" /></label>
               {:else}<label>Text to copy<textarea bind:value={draft.value} required maxlength="4000" rows="3" placeholder="ssh arch"></textarea></label>{/if}
+              <label class="wide">Shortcut group<input bind:value={draft.group} list="shortcut-group-names" maxlength="48" placeholder="Ungrouped" /><small>Choose an existing group or type a new name, such as Media.</small></label>
+              <datalist id="shortcut-group-names">{#each groups.filter(group => group.name) as group}<option value={group.name}></option>{/each}</datalist>
+              {#if draft.action === 'open'}
+                <label class="wide">Container monitoring
+                  <select value={draft.monitor ? monitorKey(draft.monitor) : ''} onchange={selectMonitor}>
+                    <option value="">Not linked</option>
+                    {#if draft.monitor && !choices.some(choice => monitorKey(choice.target) === monitorKey(draft.monitor!))}<option value={monitorKey(draft.monitor)}>Saved link (currently unavailable)</option>{/if}
+                    <optgroup label="Projects">{#each choices.filter(choice => choice.kind === 'project') as choice}<option value={monitorKey(choice.target)}>{choice.label}</option>{/each}</optgroup>
+                    <optgroup label="Containers">{#each choices.filter(choice => choice.kind === 'container') as choice}<option value={monitorKey(choice.target)}>{choice.label}</option>{/each}</optgroup>
+                  </select>
+                  <small>A project includes all its containers. A container link follows its Compose service across recreations.</small>
+                </label>
+                <div class="monitor-help wide"><span>{monitorLoading ? 'Loading containers…' : monitorError || (monitorData?.configured === false ? 'Container monitoring is not connected.' : 'Update badges open infrastructure details; the shortcut still opens your service.')}</span><button type="button" disabled={monitorLoading} onclick={refreshMonitoring}>Refresh list</button></div>
+              {/if}
               <label class="wide">Search aliases<input bind:value={aliases} maxlength="1600" placeholder="qbit, torrent, downloads" /><small>Separate aliases with commas.</small></label>
             </div>
             <div class="appearance">
@@ -217,10 +321,10 @@
       {/if}
       {@render cards()}
       <div class="managed-list" aria-label="Shortcut order">
-        {#each data.items as item, index (item.id)}{@const Icon = shortcutIcon(item.icon)}
-          <div class="managed-row"><span class="managed-icon" style:color={item.color}><Icon size={19} /></span><div class="managed-name"><strong>{item.name}</strong><small>{item.description || (item.action === 'copy' ? 'Copy text' : item.value)}</small></div>
-            <div class="row-actions"><button class="small-icon" disabled={index === 0 || data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={15} /></button><button class="small-icon" disabled={index === data.items.length - 1 || data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={15} /></button>
-              <button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={15} /></button><button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={15} /></button></div>
+        {#each arrangedItems as item (item.id)}{@const Icon = shortcutIcon(item.icon)}
+          <div class="managed-row"><span class="managed-icon" style:color={item.color}><Icon size={19} /></span><div class="managed-name"><strong>{item.name}</strong><small>{item.group ? `${item.group} · ` : ''}{item.description || (item.action === 'copy' ? 'Copy text' : item.value)}</small></div>
+            <div class="row-actions"><button class="small-icon" disabled={!canMove(item, -1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={15} /></button><button class="small-icon" disabled={!canMove(item, 1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={15} /></button>
+              <button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={15} /></button><button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={15} /></button></div>
           </div>
           {#if deleting === item.id}<div class="delete-confirm" role="group" aria-label={`Confirm deleting ${item.name}`}><span>Delete “{item.name}”?</span><button disabled={data.busy} onclick={() => deleting = null}>Keep shortcut</button><button class="delete-button" disabled={data.busy} onclick={() => remove(item.id)}>Delete shortcut</button></div>{/if}
         {/each}
@@ -239,6 +343,28 @@
 </section>
 
 <style>
+  .shortcut-groups { display: grid; gap: 23px; }
+  .shortcut-group { min-width: 0; }
+  .grouped .shortcut-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  @media (max-width: 850px) { .grouped .shortcut-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 540px) { .grouped .shortcut-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .group-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
+  .group-heading h3 { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: 11px; font-weight: 600; color: var(--text); }
+  .group-heading > span { color: var(--muted); font-size: 10px; }
+  .group-actions { display: flex; flex-shrink: 0; margin-left: auto; gap: 3px; }
+  .group-editor { padding: 16px; border: 1px solid var(--line); border-radius: 8px; margin: 0 0 15px; background: var(--bg); }
+  .group-editor > h3 { margin: 0 0 14px; font-size: 12px; font-weight: 500; }
+  .group-editor > div { display: flex; justify-content: flex-end; gap: 15px; margin-top: 12px; font-size: 11px; }
+  .shortcut-tile { min-width: 0; position: relative; }
+  .shortcut-tile > .shortcut-card { width: 100%; }
+  .shortcut-tile > button.shortcut-card { color: var(--text); background: var(--surface); border: 1px solid var(--line); }
+  .shortcut-tile > button.shortcut-card:hover { background: var(--surface-hover); border-color: var(--highlight); }
+  .monitor-badge { position: absolute; top: 59px; right: 10px; max-width: calc(100% - 20px); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; color: var(--warning); background: var(--bg); text-decoration: none; font-size: 9px; line-height: 1.2; white-space: nowrap; }
+  .monitor-badge.unknown { color: var(--muted); }
+  .monitor-badge:hover { border-color: var(--highlight); color: var(--highlight); }
+  @media (max-width: 540px) { .monitor-badge { min-height: 30px; top: 54px; padding: 6px 8px; display: inline-flex; align-items: center; } }
+  .monitor-help { display: flex; align-items: center; gap: 12px; font-size: 10px; color: var(--muted); line-height: 1.7; }
+  .monitor-help button { color: var(--highlight); white-space: nowrap; }
   .arranging { margin-top: 22px; }
   .sortable-card { position: relative; }
   .sortable-card:hover { transform: none; }

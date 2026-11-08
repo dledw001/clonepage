@@ -40,6 +40,7 @@ class ShortcutTests(unittest.TestCase):
     def test_migration_preserves_all_seven_current_shortcuts(self):
         data = self.read()
         expected = json.loads(Path(shortcuts.__file__).with_name('shortcut_defaults.json').read_text(encoding='utf-8'))
+        expected = [dict(item, group='', monitor=None) for item in expected]
         self.assertEqual(data, {'items': expected, 'revision': 0})
         self.assertEqual(data['items'][0]['value'], 'https://dsm.dledwith.com')
         self.assertEqual(data['items'][2]['value'], 'https://qbit.dledwith.com')
@@ -130,6 +131,75 @@ class ShortcutTests(unittest.TestCase):
         self.assertEqual(self.client.delete('/api/shortcuts/missing', params={'revision': 0}).status_code, 404)
         self.assertEqual(self.client.delete('/api/shortcuts/qbit').status_code, 422)
         self.assertEqual(self.read()['revision'], 0)
+
+
+    def test_group_and_compose_monitor_link_survive_edits_and_reinitialization(self):
+        target = {'kind':'container','watcher':'local','project':'media','service':'plex','container':None}
+        created = self.create({'group':'  Media  ', 'monitor':target})
+        self.assertEqual(created.status_code,201,created.text)
+        saved=created.json()['items'][-1]
+        self.assertEqual(saved['group'],'Media');self.assertEqual(saved['monitor'],target)
+        shortcuts.initialize_shortcuts()
+        self.assertEqual(self.read()['items'][-1],saved)
+        canonical=self.create({'group':'media'})
+        self.assertEqual(canonical.json()['items'][-1]['group'],'Media')
+
+    def test_migration_of_existing_database_preserves_custom_names_order_and_revision(self):
+        with main.database() as db:
+            db.execute("UPDATE shortcuts SET name = 'My downloads', position = -1 WHERE id = 'qbit'")
+            db.execute("UPDATE shortcut_settings SET revision = 8")
+            db.execute("ALTER TABLE shortcuts DROP COLUMN group_name")
+            db.execute("ALTER TABLE shortcuts DROP COLUMN monitor")
+        shortcuts.initialize_shortcuts()
+        data=self.read()
+        self.assertEqual(data['revision'],8)
+        self.assertEqual(data['items'][0]['name'],'My downloads')
+        self.assertTrue(all(item['group']=='' and item['monitor'] is None for item in data['items']))
+        self.assertEqual(len(data['items']),7)
+
+    def test_older_client_update_keeps_organization_and_copy_conversion_clears_monitoring(self):
+        target={'kind':'project','watcher':'local','project':'media'}
+        data=self.create({'group':'Media','monitor':target}).json()
+        saved=data['items'][-1]
+        old_draft=self.draft();old_draft.update(name='Renamed by older client',revision=data['revision'])
+        response=self.client.put('/api/shortcuts/'+saved['id'],json=old_draft)
+        self.assertEqual(response.status_code,200,response.text)
+        latest=response.json()['items'][-1]
+        self.assertEqual(latest['group'],'Media');self.assertEqual(latest['monitor']['project'],'media')
+        old_draft.update(action='copy',value='ssh nas',revision=response.json()['revision'])
+        copied=self.client.put('/api/shortcuts/'+saved['id'],json=old_draft)
+        self.assertEqual(copied.status_code,200,copied.text)
+        self.assertIsNone(copied.json()['items'][-1]['monitor'])
+        self.assertEqual(copied.json()['items'][-1]['group'],'Media')
+
+    def test_rename_and_remove_group_are_revisioned_and_keep_shortcuts(self):
+        self.create({'group':'Media'});self.create({'group':'Media'});self.create({'group':'Tools'})
+        before=self.read()
+        renamed=self.client.put('/api/shortcuts/groups',json={'name':'Media','new_name':'Entertainment','revision':before['revision']})
+        self.assertEqual(renamed.status_code,200,renamed.text)
+        self.assertEqual(sum(item['group']=='Entertainment' for item in renamed.json()['items']),2)
+        stale=self.client.put('/api/shortcuts/groups',json={'name':'Entertainment','new_name':'Video','revision':before['revision']})
+        self.assertEqual(stale.status_code,409)
+        collision=self.client.put('/api/shortcuts/groups',json={'name':'Entertainment','new_name':'tools','revision':renamed.json()['revision']})
+        self.assertEqual(collision.status_code,409)
+        removed=self.client.put('/api/shortcuts/groups',json={'name':'Entertainment','new_name':'','revision':renamed.json()['revision']})
+        self.assertEqual(removed.status_code,200,removed.text)
+        self.assertEqual(len(removed.json()['items']),len(before['items']))
+        self.assertFalse(any(item['group']=='Entertainment' for item in removed.json()['items']))
+
+    def test_invalid_groups_and_monitor_targets_cannot_change_data(self):
+        before=self.read()
+        for changes in [
+            {'group':'x'*49}, {'group':'Media\nTools'},
+            {'monitor':{'kind':'project','watcher':'local','project':'media','service':'plex'}},
+            {'monitor':{'kind':'container','watcher':'local','service':'plex'}},
+            {'monitor':{'kind':'container','watcher':'local'}},
+            {'monitor':{'kind':'container','watcher':'local','container':'plex','extra':'unsupported'}},
+            {'monitor':{'kind':'project','watcher':''}},
+            {'action':'copy','monitor':{'kind':'project','watcher':'local','project':'media'}},
+        ]:
+            with self.subTest(changes=changes): self.assertEqual(self.create(changes).status_code,422)
+        self.assertEqual(self.read(),before)
 
 
 if __name__ == '__main__': unittest.main()

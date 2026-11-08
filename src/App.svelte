@@ -35,6 +35,7 @@
   const initialRoute = routeFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
   let page = $state<'home' | 'infrastructure' | 'reader'>(initialRoute.page);
   let readerId = $state(initialRoute.articleId);
+  let monitorFocus = $state(typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('monitor'));
   let homeVisited = $state(initialRoute.page === 'home');
   const navigation = typeof window === 'undefined' ? undefined : new PageNavigation(window, async () => {
     syncRoute();
@@ -43,7 +44,7 @@
     await tick();
   });
 
-  function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; }
+  function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; monitorFocus = new URLSearchParams(window.location.search).get('monitor'); }
 
   let searchInput = $state<HTMLInputElement>();
   let searchRegion = $state<HTMLDivElement>();
@@ -244,7 +245,7 @@
       {#if page === 'reader'}
         {#key readerId}<SavedArticle articleId={readerId} {theme} onback={backToList} />{/key}
       {:else if page === 'infrastructure'}
-        <Infrastructure />
+        <Infrastructure {monitorFocus} />
       {/if}
       {#if homeVisited}
       <div hidden={page !== 'home'}>
@@ -324,7 +325,7 @@
         </p>
       </section>
 
-      <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} active={page === 'home'} />
+      <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} onmonitor={navigate} active={page === 'home'} />
       <ReadingList active={page === 'home'} onnavigate={navigate} />
       <Feeds active={page === 'home'} />
       </div>

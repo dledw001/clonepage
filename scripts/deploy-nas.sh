@@ -75,7 +75,8 @@ main() {
     printf '\n%s Deploying %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$revision"
     docker compose config --quiet
     # Finish all builds before changing running containers. Never run compose down.
-    docker compose build
+    # The script records the revision itself; skip Buildx Git lookups as root.
+    BUILDX_GIT_INFO=false docker compose build
     docker compose up -d --no-build --force-recreate
 
     attempt=1

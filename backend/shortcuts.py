@@ -48,6 +48,11 @@ def initialize_shortcuts():
     with database() as db:
         db.executescript(schema_sql)
         db.execute("BEGIN IMMEDIATE")
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(shortcuts)")}
+        if "group_name" not in columns:
+            db.execute("ALTER TABLE shortcuts ADD COLUMN group_name TEXT NOT NULL DEFAULT ''")
+        if "monitor" not in columns:
+            db.execute("ALTER TABLE shortcuts ADD COLUMN monitor TEXT DEFAULT NULL")
         if db.execute("SELECT 1 FROM shortcut_settings WHERE id = 1").fetchone():
             return
         defaults = json.loads(Path(__file__).with_name("shortcut_defaults.json").read_text(encoding="utf-8"))
@@ -56,6 +61,40 @@ def initialize_shortcuts():
             db.execute(insert_sql, (item["id"], *values(validated), position))
         # This marker remains even if every shortcut is deleted.
         db.execute("INSERT INTO shortcut_settings (id, revision) VALUES (1, 0)")
+
+
+def clean_group(value):
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("Group names cannot contain control characters.")
+    return " ".join(value.split())
+
+
+class MonitorTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    kind: Literal["container", "project"]
+    watcher: str = Field(min_length=1, max_length=128)
+    project: str | None = Field(default=None, min_length=1, max_length=256)
+    service: str | None = Field(default=None, min_length=1, max_length=256)
+    container: str | None = Field(default=None, min_length=1, max_length=256)
+
+    @field_validator("watcher", "project", "service", "container")
+    @classmethod
+    def valid_identifier(cls, value):
+        if value is not None and any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("Monitoring names cannot contain control characters.")
+        return value
+
+    @model_validator(mode="after")
+    def valid_binding(self):
+        if self.kind == "project":
+            if self.service is not None or self.container is not None:
+                raise ValueError("A project association cannot specify a container or service.")
+        elif self.service is not None:
+            if self.project is None or self.container is not None:
+                raise ValueError("A service association needs a project and no container name.")
+        elif self.container is None:
+            raise ValueError("Choose a container or a Compose service to monitor.")
+        return self
 
 
 class ShortcutFields(BaseModel):
@@ -67,6 +106,13 @@ class ShortcutFields(BaseModel):
     color: str
     action: Literal["open", "copy"]
     value: str = Field(min_length=1, max_length=4000)
+    group: str = Field(default="", max_length=48)
+    monitor: MonitorTarget | None = None
+
+    @field_validator("group")
+    @classmethod
+    def valid_group(cls, value):
+        return clean_group(value)
 
     @field_validator("aliases")
     @classmethod
@@ -98,6 +144,8 @@ class ShortcutFields(BaseModel):
 
     @model_validator(mode="after")
     def valid_target(self):
+        if self.action == "copy" and self.monitor is not None:
+            raise ValueError("Container monitoring is available for website shortcuts.")
         if self.action == "open":
             try:
                 HttpUrl(self.value)
@@ -133,6 +181,8 @@ def snapshot(db):
         item = dict(row)
         item["aliases"] = json.loads(item["aliases"])
         item.pop("position")
+        item["group"] = item.pop("group_name")
+        item["monitor"] = json.loads(item["monitor"]) if item["monitor"] else None
         items.append(item)
     return {"items": items, "revision": db.execute("SELECT revision FROM shortcut_settings WHERE id = 1").fetchone()[0]}
 
@@ -149,6 +199,40 @@ def changed(db):
     return snapshot(db)
 
 
+def canonical_group(db, name):
+    rows = db.execute("SELECT group_name FROM shortcuts ORDER BY position, id").fetchall()
+    return next((row[0] for row in rows if row[0].casefold() == name.casefold()), name)
+
+
+def organization_values(db, item):
+    return canonical_group(db, item.group), json.dumps(item.monitor.model_dump()) if item.monitor else None
+
+
+class GroupRename(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    revision: int = Field(ge=0)
+    name: str = Field(min_length=1, max_length=48)
+    new_name: str = Field(default="", max_length=48)
+
+    @field_validator("name", "new_name")
+    @classmethod
+    def valid_name(cls, value):
+        return clean_group(value)
+
+
+@router.put("/groups")
+def rename_group(item: GroupRename):
+    with database() as db:
+        check_revision(db, item.revision)
+        names = {row[0] for row in db.execute("SELECT DISTINCT group_name FROM shortcuts")}
+        if item.name not in names:
+            raise HTTPException(404, "This group no longer exists.")
+        if item.new_name and any(name != item.name and name.casefold() == item.new_name.casefold() for name in names):
+            raise HTTPException(409, "Another group already uses that name. Choose a different name.")
+        db.execute("UPDATE shortcuts SET group_name = ? WHERE group_name = ?", (item.new_name, item.name))
+        return changed(db)
+
+
 @router.get("")
 def list_shortcuts():
     with database() as db:
@@ -160,15 +244,15 @@ def list_shortcuts():
 def create_shortcut(item: ShortcutWrite):
     # language=SQL
     insert_sql = """
-    INSERT INTO shortcuts (id, name, description, aliases, icon, color, action, value, position)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shortcuts (id, name, description, aliases, icon, color, action, value, position, group_name, monitor)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     with database() as db:
         check_revision(db, item.revision)
         if db.execute("SELECT COUNT(*) FROM shortcuts").fetchone()[0] >= MAX_SHORTCUTS:
             raise HTTPException(422, "You can save up to 100 shortcuts.")
         position = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM shortcuts").fetchone()[0]
-        db.execute(insert_sql, (uuid4().hex, *values(item), position))
+        db.execute(insert_sql, (uuid4().hex, *values(item), position, *organization_values(db, item)))
         return changed(db)
 
 
@@ -187,13 +271,21 @@ def reorder_shortcuts(order: ShortcutOrder):
 def update_shortcut(shortcut_id: str, item: ShortcutWrite):
     # language=SQL
     update_sql = """
-    UPDATE shortcuts SET name = ?, description = ?, aliases = ?, icon = ?, color = ?, action = ?, value = ?
+    UPDATE shortcuts SET name = ?, description = ?, aliases = ?, icon = ?, color = ?, action = ?, value = ?, group_name = ?, monitor = ?
     WHERE id = ?
     """
     with database() as db:
         check_revision(db, item.revision)
-        if db.execute(update_sql, (*values(item), shortcut_id)).rowcount == 0:
+        existing = db.execute("SELECT group_name, monitor FROM shortcuts WHERE id = ?", (shortcut_id,)).fetchone()
+        if existing is None:
             raise HTTPException(404, "This shortcut no longer exists.")
+        group, monitor = organization_values(db, item)
+        # Older cached clients can still edit a shortcut without erasing new fields.
+        if "group" not in item.model_fields_set:
+            group = existing["group_name"]
+        if "monitor" not in item.model_fields_set and item.action == "open":
+            monitor = existing["monitor"]
+        db.execute(update_sql, (*values(item), group, monitor, shortcut_id))
         return changed(db)
 
 

@@ -6,7 +6,7 @@ import { compile } from 'svelte/compiler';
 
 const source = readFileSync(new URL('../src/lib/shortcuts.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext } }).outputText;
-const { ShortcutStore } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+const { ShortcutStore, groupShortcuts, orderShortcutGroup, moveShortcutGroup } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 const item = (id, extra = {}) => ({ id, name: id, description: '', aliases: [], icon: 'Server', color: '#a4b9e4', action: 'open', value: 'https://example.com', ...extra });
 const snapshot = (items, revision = 0) => ({ items, revision });
 const response = (data, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => data });
@@ -193,15 +193,15 @@ test('dragging within the original position avoids an unnecessary save', () => {
 });
 
 
-function dragHandlers() {
+function dragHandlers(itemGroups = {}) {
   const component = readFileSync(new URL('../src/components/Shortcuts.svelte', import.meta.url), 'utf8');
   const script = component.match(/<script[^>]*>([\s\S]*?)<\/script>/)[1];
   const tree = ts.createSourceFile('Shortcuts.ts', script, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const names = ['startDrag','moveDrag','updateDrag','endDrag','cancelDrag','cancelPointer','autoScroll','dragKey'];
   const handlers = tree.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)).map(node => node.getText(tree)).join('\n');
-  const code = `let gesture=null, drag=null, captured=null, scrollFrame, dragNotice='', deleting=null, editorOpen=false, serviceOpen=false;
-    let data={busy:false,revision:9,items:['a','b','c','d'].map(id=>({id}))};
-    const grid={querySelectorAll:()=>bounds.map(rect=>({getBoundingClientRect:()=>rect}))};
+  const code = `let gesture=null, drag=null, captured=null, scrollFrame, dragNotice='', deleting=null, editorOpen=false, serviceOpen=false, groupEditing=null;
+    let data={busy:false,revision:9,items:['a','b','c','d'].map(id=>({id,group:${JSON.stringify(itemGroups)}[id]??''}))};
+    const grid={querySelectorAll:()=>bounds.map((rect,index)=>({dataset:{shortcutId:data.items[index].id},getBoundingClientRect:()=>rect}))};
     ${handlers}
     return {startDrag,moveDrag,endDrag,cancelPointer,dragKey,drag:()=>drag,notice:()=>dragNotice,
       setBusy(value){data.busy=value},setEditing(value){editorOpen=value}};`;
@@ -209,8 +209,8 @@ function dragHandlers() {
   let pointer; let releases = 0; const saves = [];
   const handle = { closest:()=>({getBoundingClientRect:()=>({ ...grid[0],width:100,height:120 })}), focus(){},
     setPointerCapture(id){pointer=id}, hasPointerCapture:id=>pointer===id, releasePointerCapture(){pointer=undefined;releases++} };
-  const controller = new Function('ShortcutDrag','bounds','store','requestAnimationFrame','cancelAnimationFrame',compiled)(ShortcutDrag,grid,
-    {reorder:async(ids,revision)=>{saves.push({ids,revision});return true}},()=>1,()=>{});
+  const controller = new Function('ShortcutDrag','bounds','store','requestAnimationFrame','cancelAnimationFrame','orderShortcutGroup',compiled)(ShortcutDrag,grid,
+    {reorder:async(ids,revision)=>{saves.push({ids,revision});return true}},()=>1,()=>{},orderShortcutGroup);
   const event = (extra={}) => ({pointerId:7,pointerType:'touch',isPrimary:true,button:0,clientX:80,clientY:30,currentTarget:handle,preventDefault(){},...extra});
   return {controller,event,saves,releases:()=>releases};
 }
@@ -234,4 +234,55 @@ test('pointer cancellation, Escape, and disabled editing never save a drag', asy
   c.startDrag(event(),{id:'a'});c.moveDrag(event({clientX:300,clientY:190}));
   c.dragKey({key:'Escape',preventDefault(){}});await c.endDrag(event({clientX:300,clientY:190}));
   assert.equal(c.drag(),null);assert.deepEqual(saves,[]);
+});
+
+
+test('shortcut groups preserve first-seen group order and member order', () => {
+  const items = [item('a', {group:'Media'}), item('b'), item('c', {group:'Media'}), item('d', {group:'Tools'})];
+  assert.deepEqual(groupShortcuts(items).map(group => [group.name, group.items.map(item => item.id)]), [['Media',['a','c']],['',['b']],['Tools',['d']]]);
+  assert.deepEqual(orderShortcutGroup(items, 'Media', ['c','a']), ['c','a','b','d']);
+  assert.deepEqual(orderShortcutGroup(items, 'Media', ['c','foreign']), items.map(item => item.id));
+  assert.deepEqual(moveShortcutGroup(items, 'Tools', -1), ['a','c','d','b']);
+});
+
+test('shortcut arrows stay within a group and group ordering retains a complete revisioned list', async () => {
+  const items = [item('a', {group:'Media'}), item('b', {group:'Tools'}), item('c', {group:'Media'})];
+  const writes = [];
+  const store = new ShortcutStore(() => {}, async (_, options) => {
+    if (!options.method) return response(snapshot(items, 4));
+    const body = JSON.parse(options.body); writes.push(body);
+    return response(snapshot(body.ids.map(id => items.find(item => item.id === id)), 5));
+  });
+  await store.refresh();
+  assert.equal(await store.move('b', 1), false);
+  assert.equal(await store.move('a', 1), true);
+  assert.deepEqual(writes[0], {ids:['c','a','b'], revision:4});
+  assert.equal(await store.moveGroup('Tools', -1), true);
+  assert.deepEqual(writes[1], {ids:['b','c','a'], revision:5});
+});
+
+test('group rename conflicts keep the latest server list and can be retried', async () => {
+  let reads = 0; let request;
+  const store = new ShortcutStore(() => {}, async (url, options) => {
+    if (!options.method) return response(snapshot([item('a', {group: ++reads === 1 ? 'Media' : 'Video'})], reads));
+    request = {url, body:JSON.parse(options.body)};
+    return response({detail:'Changed on another device'}, 409);
+  });
+  await store.refresh();
+  assert.equal(await store.renameGroup('Media', 'Video', 1), false);
+  assert.deepEqual(request, {url:'/api/shortcuts/groups',body:{name:'Media',new_name:'Video',revision:1}});
+  assert.equal(store.state.items[0].group, 'Video'); assert.equal(store.state.conflict, true);
+});
+
+
+test('grouped pointer dragging reorders only its members and rejects a drop on another group', async () => {
+  const {controller:c,event,saves} = dragHandlers({a:'Media',c:'Media',b:'Tools',d:'Tools'});
+  c.startDrag(event(),{id:'a',group:'Media'});
+  c.moveDrag(event({clientX:10,clientY:190}));
+  await c.endDrag(event({clientX:10,clientY:190}));
+  assert.deepEqual(saves,[]);
+  c.startDrag(event(),{id:'a',group:'Media'});
+  c.moveDrag(event({clientX:300,clientY:60}));
+  await c.endDrag(event({clientX:300,clientY:60}));
+  assert.deepEqual(saves,[{ids:['c','a','b','d'],revision:9}]);
 });

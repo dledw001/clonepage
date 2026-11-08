@@ -16,8 +16,10 @@ globalThis.ResizeObserver = class {
 function browser(path = '/') {
   const listeners = new Map(); const frames = new Map(); const timers = new Map();
   const stack = [{ path, state: { existing: true } }]; let index = 0; let id = 0;
+  const location = new URL(path, 'https://clonepage.example');
+  const setLocation = path => { const url = new URL(path, location.origin); b.location.pathname = url.pathname; b.location.search = url.search; b.location.hash = url.hash; };
   const b = {
-    location: { pathname: path }, scrollX: 0, scrollY: 0, maxScroll: Infinity, document: { body: {} },
+    location: { pathname: location.pathname, search: location.search, hash: location.hash }, scrollX: 0, scrollY: 0, maxScroll: Infinity, document: { body: {} },
     addEventListener(type, fn) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(fn); },
     removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
     emit(type) { for (const fn of [...(listeners.get(type) ?? [])]) fn(); },
@@ -28,9 +30,9 @@ function browser(path = '/') {
     history: {
       scrollRestoration: 'auto', get state() { return stack[index].state; },
       replaceState(state) { stack[index].state = state; },
-      pushState(state, _, path) { stack.splice(++index); stack.push({ state, path }); b.location.pathname = path; },
-      back() { if (index > 0) { b.location.pathname = stack[--index].path; b.emit('popstate'); } },
-      forward() { if (index + 1 < stack.length) { b.location.pathname = stack[++index].path; b.emit('popstate'); } },
+      pushState(state, _, path) { stack.splice(++index); stack.push({ state, path }); setLocation(path); },
+      back() { if (index > 0) { setLocation(stack[--index].path); b.emit('popstate'); } },
+      forward() { if (index + 1 < stack.length) { setLocation(stack[++index].path); b.emit('popstate'); } },
       get length() { return stack.length; }
     }
   };
@@ -97,4 +99,18 @@ test('web search encodes queries and retains direct URL entry', () => {
   assert.equal(webSearchUrl(' cpu & ram '), 'https://www.google.com/search?q=cpu%20%26%20ram');
   assert.equal(webSearchUrl('example.com/article'), 'https://example.com/article');
   assert.equal(webSearchUrl('http://localhost:8000'), 'http://localhost:8000');
+});
+
+
+test('monitoring query and fragment links preserve history and can return to the full infrastructure view', async () => {
+  const b = browser(); const nav = new PageNavigation(b, async () => {}); const stop = nav.start();
+  const path = '/infrastructure?monitor=linked-project#container-updates';
+  await nav.go(path);
+  assert.equal(b.location.pathname, '/infrastructure'); assert.equal(b.location.search, '?monitor=linked-project');
+  assert.equal(b.location.hash, '#container-updates'); assert.equal(b.history.length, 2);
+  await nav.go(path); assert.equal(b.history.length, 2);
+  await nav.go('/infrastructure'); assert.equal(b.location.search, ''); assert.equal(b.location.hash, '');
+  b.history.back(); await settle(); assert.equal(b.location.search, '?monitor=linked-project');
+  b.history.back(); await settle(); assert.equal(b.location.pathname, '/');
+  stop();
 });

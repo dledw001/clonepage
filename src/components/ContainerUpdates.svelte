@@ -1,10 +1,19 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { ArrowUpRight, ChevronDown, Container, RefreshCw, TriangleAlert } from '@lucide/svelte';
   import { fetchJson } from '../lib/infrastructure';
-  import { containerVersion, effectiveState, groupContainers, wudAge, type ContainerSnapshot } from '../lib/container-updates';
+  import { containerVersion, effectiveState, groupContainers, monitorMatches, parseMonitorTarget, wudAge, type ContainerSnapshot } from '../lib/container-updates';
 
-  let { revision = 0 }: { revision?: number } = $props();
+  let { revision = 0, monitorFocus = null }: { revision?: number; monitorFocus?: string | null } = $props();
+  const focusTarget = $derived(parseMonitorTarget(monitorFocus));
+  let focusHandled = $state<string | null>(null);
+  let targetNotice = $state('');
+  let expanded = $state<string[]>([]);
+  function projectId(id: string) { return `wud-project-${encodeURIComponent(id)}`; }
+  function containerId(watcher: string, id: string) { return `wud-container-${encodeURIComponent(JSON.stringify([watcher, id]))}`; }
+  function toggleProject(id: string, open: boolean) {
+    expanded = open ? [...new Set([...expanded, id])] : expanded.filter(key => key !== id);
+  }
   let snapshot = $state<ContainerSnapshot | null>(null);
   let loading = $state(false);
   let error = $state('');
@@ -43,6 +52,27 @@
 
   $effect(() => { void revision; if (mounted) void refresh(); });
 
+  $effect(() => {
+    const target = focusTarget;
+    const signature = monitorFocus;
+    if (!target) { focusHandled = null; targetNotice = ''; return; }
+    if (!snapshot || snapshot.stale || error || focusHandled === signature) return;
+    if (!snapshot.configured) { targetNotice = 'Container monitoring is not connected.'; return; }
+    const project = projects.find(project => project.containers.some(item => monitorMatches(target, item)));
+    if (!project) { targetNotice = 'The linked container or project is not currently reported by WUD. You can review other projects below or refresh the results.'; return; }
+    const item = project.containers.find(item => monitorMatches(target, item))!;
+    expanded = [...new Set([...expanded, project.id])];
+    focusHandled = signature;
+    targetNotice = '';
+    void tick().then(() => {
+      if (disposed || signature !== monitorFocus) return;
+      const element = target.kind === 'project' ? document.getElementById(projectId(project.id))?.querySelector<HTMLElement>('summary')
+        : document.getElementById(containerId(item.watcher, item.id));
+      element?.scrollIntoView({ block: target.kind === 'project' ? 'start' : 'center', behavior: 'instant' });
+      element?.focus({ preventScroll: true });
+    });
+  });
+
   onMount(() => {
     mounted = true;
     disposed = false;
@@ -59,8 +89,8 @@
   });
 </script>
 
-{#if snapshot?.configured || error}
-  <section class="container-updates" aria-labelledby="container-updates-title" aria-busy={loading}>
+{#if snapshot?.configured || error || focusTarget}
+  <section id="container-updates" class="container-updates" aria-labelledby="container-updates-title" aria-busy={loading}>
     <header class="section-heading">
       <div><div class="container-eyebrow"><Container size={15} />CONTAINERS</div><h2 id="container-updates-title">Container updates</h2><p>{projects.length} project groups · {snapshot?.containers.length ?? 0} containers watched by WUD</p></div>
       <div class="actions">
@@ -69,6 +99,7 @@
       </div>
     </header>
     {#if notice}<div class="notice" role="status"><TriangleAlert size={16} /><p>{notice}{snapshot?.fetched_at ? ' Showing previous details; update status is unavailable.' : ''}</p></div>{/if}
+    {#if targetNotice}<p class="target-notice" role="status">{targetNotice}</p>{/if}
     <div class="summary-grid">
       <article><span>PROJECTS WITH UPDATES</span><strong>{stale ? '—' : projects.filter(project => project.updates > 0).length}</strong></article>
       <article><span>CONTAINERS WITH UPDATES</span><strong>{stale ? '—' : updates}</strong></article>
@@ -84,7 +115,7 @@
     </div>
     <div class="projects">
       {#each visibleProjects as project (project.id)}
-        <details class="project">
+        <details id={projectId(project.id)} class="project" open={expanded.includes(project.id)} ontoggle={event => toggleProject(project.id, event.currentTarget.open)}>
           <summary>
             <span class="project-name"><Container size={17} /><span><strong>{project.name}</strong><small>{project.containers.length} container{project.containers.length === 1 ? '' : 's'} · {project.watcher}</small></span></span>
             <span class="project-status"><span class="badge" class:update={project.state === 'update'} class:unknown={project.state === 'unknown'}>{stale ? 'Status unavailable' : project.updates ? `${project.updates} update${project.updates === 1 ? '' : 's'}` : project.unknown ? `${project.unknown} incomplete` : 'No updates reported'}</span><ChevronDown size={15} /></span>
@@ -92,7 +123,7 @@
           <div class="container-list">
             {#each project.containers as item (`${item.watcher}:${item.id}`)}
               {@const state = effectiveState(item, stale)}
-              <article class="container-row">
+              <article id={containerId(item.watcher, item.id)} class="container-row" class:linked-target={focusTarget && monitorMatches(focusTarget, item)} tabindex="-1" aria-label={item.name}>
                 <div class="container-heading"><h3>{item.name}</h3><span class="badge" class:update={state === 'update'} class:unknown={state === 'unknown'}>{stale ? 'Status unavailable' : labels[state]}</span>{#if state === 'update' && item.change === 'major'}<span class="badge major">Major version</span>{/if}</div>
                 <p class="image-name">{item.image}{item.current_tag ? `:${item.current_tag}` : ''}</p>
                 <dl><div><dt>Installed</dt><dd title={item.current_digest ?? ''}>{containerVersion(item)}</dd></div>{#if state === 'update'}<div><dt>Available</dt><dd title={item.available_digest ?? ''}>{containerVersion(item, true)}</dd></div>{/if}<div><dt>Container</dt><dd>{item.runtime_status}</dd></div></dl>
@@ -111,6 +142,9 @@
 {/if}
 
 <style>
+  .container-updates, .project, .container-row { scroll-margin-top: 25px; }
+  .linked-target { box-shadow: inset 3px 0 var(--highlight); }
+  .target-notice { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 0 0 17px; }
   .container-updates { margin-top: 38px; padding-top: 30px; border-top: 1px solid var(--line); }
   .section-heading, .actions, .container-eyebrow, .project-name, .project-status, .container-heading, .filters { display: flex; align-items: center; gap: 12px; }
   .section-heading { justify-content: space-between; flex-wrap: wrap; margin-bottom: 21px; }

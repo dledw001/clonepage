@@ -41,6 +41,7 @@ def checked_time(value):
 class ContainerReading(BaseModel):
     id: str
     name: str
+    container_name: str
     watcher: str
     project: str | None
     service: str | None
@@ -100,7 +101,7 @@ def normalize_container(item):
     project = text(labels.get("com.docker.compose.project")) or text(item.get("stack")) or None
     return ContainerReading(
         id=text(item["id"]), name=text(item.get("displayName")) or text(item["name"]),
-        watcher=text(item.get("watcher")) or "default", project=project,
+        container_name=text(item["name"]), watcher=text(item.get("watcher")) or "default", project=project,
         service=text(labels.get("com.docker.compose.service")) or None, image=text(image["name"]),
         current_tag=text(tag.get("value")) or None, available_tag=text(result.get("tag")) or None,
         current_version=text(image.get("version")) or None, available_version=text(result.get("version")) or None,

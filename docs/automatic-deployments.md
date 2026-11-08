@@ -39,6 +39,7 @@ These defaults match this installation: `/volume2/docker/clonepage`, user `dledw
 - The checkout must be on `main` with no tracked or untracked local changes. Ignored data and environment files are allowed.
 - Git fetches `origin/main` and fast-forwards only. Local commits ahead of or diverged from the remote stop deployment without resetting or discarding work.
 - Compose configuration is validated and **all images finish building before any containers are recreated**. A build failure leaves the running containers alone.
+- Builds set `BUILDX_GIT_INFO=false` to skip optional Buildx Git metadata lookup under root. The script still records the successfully deployed commit independently. This avoids the commit-information warning when Buildx cannot read a checkout owned by `dledwith`.
 - Startup uses `docker compose up -d --no-build --force-recreate`, preserving the existing mounted data. The script never calls `compose down`.
 - The script waits for `api`, `web`, and `worker` to be running and for `http://127.0.0.1:8765/api/shortcuts` to respond successfully through Caddy and the API.
 - The deployed commit is recorded only after those checks succeed. If building, startup, or readiness fails after Git advances, the next scheduled run retries that checkout even without another push.

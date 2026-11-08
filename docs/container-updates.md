@@ -43,6 +43,10 @@ Without a token, this optional panel stays hidden and no requests go to WUD. Inv
 
 The observed v9.8 `/api/containers` response does not include check timestamps. In that case the panel says **WUD check time unavailable**. **Synced with WUD** means when Clonepage fetched WUD's stored results, not when WUD scanned a registry. If the API supplies a check timestamp, it is shown per container.
 
+## Link shortcuts
+
+In **Manage shortcuts > Edit**, use Container monitoring to associate a website shortcut with a project or Compose service/container. Update and Review badges open focused Infrastructure details. Groups and monitoring associations are independent: for example, a Media group can contain Sonarr linked to the `sonarr` service inside the `qbittorrent` project. See [Editable shortcuts](shortcuts.md) for group controls, matching rules, and badge behavior.
+
 ## Refresh and failures
 
 Clonepage calls only `GET /api/containers` with `Authorization: Bearer ...`. It does not trigger scans, update images, restart containers, or require access to the Docker socket. Registry scanning and updates remain in WUD.

@@ -1,8 +1,38 @@
+export type MonitorTarget = { kind: 'container' | 'project'; watcher: string; project: string | null;
+  service?: string | null; container?: string | null };
 export type Shortcut = { id: string; name: string; description: string; aliases: string[]; icon: string;
-  color: string; action: 'open' | 'copy'; value: string };
+  color: string; action: 'open' | 'copy'; value: string; group?: string; monitor?: MonitorTarget | null };
 export type ShortcutDraft = Omit<Shortcut, 'id'>;
 export type ShortcutSnapshot = { items: Shortcut[]; revision: number };
 export type ShortcutState = ShortcutSnapshot & { loaded: boolean; loading: boolean; busy: boolean; conflict: boolean; error: string };
+
+export type ShortcutGroup = { name: string; items: Shortcut[] };
+
+export function groupShortcuts(items: Shortcut[]): ShortcutGroup[] {
+  const groups = new Map<string, Shortcut[]>();
+  for (const item of items) {
+    const name = item.group ?? '';
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name)!.push(item);
+  }
+  return [...groups].map(([name, items]) => ({ name, items }));
+}
+
+export function orderShortcutGroup(items: Shortcut[], name: string, ids: string[]): string[] {
+  const groups = groupShortcuts(items);
+  const group = groups.find(group => group.name === name);
+  if (!group || ids.length !== group.items.length || new Set(ids).size !== ids.length
+      || ids.some(id => !group.items.some(item => item.id === id))) return items.map(item => item.id);
+  return groups.flatMap(group => group.name === name ? ids : group.items.map(item => item.id));
+}
+
+export function moveShortcutGroup(items: Shortcut[], name: string, offset: number): string[] {
+  const groups = groupShortcuts(items);
+  const from = groups.findIndex(group => group.name === name); const to = from + offset;
+  if (from < 0 || to < 0 || to >= groups.length) return items.map(item => item.id);
+  [groups[from], groups[to]] = [groups[to], groups[from]];
+  return groups.flatMap(group => group.items.map(item => item.id));
+}
 
 export class ShortcutStore {
   state: ShortcutState = { items: [], revision: 0, loaded: false, loading: false, busy: false, conflict: false, error: '' };
@@ -75,11 +105,20 @@ export class ShortcutStore {
     return this.write(`/${encodeURIComponent(id)}?revision=${this.state.revision}`, { method: 'DELETE' });
   }
   move(id: string, offset: number) {
-    const ids = this.state.items.map(item => item.id);
+    const item = this.state.items.find(item => item.id === id);
+    if (!item) return Promise.resolve(false);
+    const name = item.group ?? '';
+    const ids = this.state.items.filter(item => (item.group ?? '') === name).map(item => item.id);
     const from = ids.indexOf(id); const to = from + offset;
     if (from < 0 || to < 0 || to >= ids.length) return Promise.resolve(false);
     [ids[from], ids[to]] = [ids[to], ids[from]];
-    return this.reorder(ids);
+    return this.reorder(orderShortcutGroup(this.state.items, name, ids));
+  }
+  moveGroup(name: string, offset: number) {
+    return this.reorder(moveShortcutGroup(this.state.items, name, offset));
+  }
+  renameGroup(name: string, newName: string, revision: number) {
+    return this.write('/groups', { method: 'PUT', body: JSON.stringify({ name, new_name: newName, revision }) });
   }
   async reorder(ids: string[], revision = this.state.revision) {
     if (this.disposed || this.state.busy) return false;
@@ -99,6 +138,7 @@ export class ShortcutStore {
     }
     return saved;
   }
+  dismissError() { if (!this.state.busy) this.update({ error: '', conflict: false }); }
   accept(snapshot: ShortcutSnapshot) {
     if (this.disposed || snapshot.revision < this.state.revision) return;
     ++this.sequence;
