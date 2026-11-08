@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 from metadata import fetch_title
 from nas_temps import NasTempsGateway, router as infrastructure_router
+from wud import WudGateway, router as containers_router
 from feeds import initialize_feeds, router as feeds_router
 from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_copies, router as saved_copies_router
 
@@ -223,8 +224,14 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(5.0, connect=2.0),
         follow_redirects=False,
         trust_env=False,
-    ) as client:
+    ) as client, httpx.AsyncClient(
+        timeout=httpx.Timeout(5.0, connect=2.0),
+        follow_redirects=False,
+        trust_env=False,
+    ) as wud_client:
         app.state.nas_temps = NasTempsGateway(client)
+        app.state.wud = WudGateway(wud_client, os.getenv("WUD_URL", "http://10.0.0.149:3000"),
+                                   os.getenv("WUD_API_TOKEN", ""), os.getenv("WUD_PUBLIC_URL", ""))
         async def reap_dsm_sessions():
             while True:
                 await asyncio.sleep(15)
@@ -248,6 +255,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 app.include_router(infrastructure_router)
+app.include_router(containers_router)
 app.include_router(feeds_router)
 app.include_router(saved_copies_router)
 app.include_router(uploads_router)

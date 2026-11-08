@@ -8,6 +8,9 @@ services:
     environment:
       READING_DB_PATH: /data/reading.sqlite3
       NAS_TEMPS_URL: ${NAS_TEMPS_URL:-http://10.0.0.149:8888}
+      WUD_URL: ${WUD_URL:-http://10.0.0.149:3000}
+      WUD_API_TOKEN: ${WUD_API_TOKEN:-}
+      WUD_PUBLIC_URL: ${WUD_PUBLIC_URL:-}
       CLONEPAGE_ORIGIN: ${CLONEPAGE_ORIGIN:-https://clonepage.dledwith.com}
       DSM_URL: ${DSM_URL:-https://dsm.dledwith.com}
       DSM_PROXY_IP: ${DSM_PROXY_IP-10.0.0.149}

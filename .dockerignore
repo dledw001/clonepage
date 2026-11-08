@@ -4,3 +4,7 @@ dist
 backend/.venv
 backend/data
 data
+# Local connection tokens belong in container runtime settings, not image layers.
+.env
+.env.*
+!.env.example
