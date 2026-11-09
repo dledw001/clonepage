@@ -22,6 +22,20 @@ Compose links use watcher, project, and service names, so container recreation a
 
 Monitoring refreshes every minute while the homepage is visible, on returning to it, and when the editor's Refresh list button is used. WUD's scanning schedule still determines the age of the underlying results. See [Container updates](container-updates.md) for configuration and status details.
 
+## Service availability
+
+In **Manage shortcuts > Edit**, enable **Check service availability** for each website you want to monitor. Existing shortcuts keep checks off until you enable them. Copy-text shortcuts have no availability checks. Availability and WUD monitoring are independent and can be used together.
+
+A small status button appears at the top right of an enabled shortcut. Its icon and color distinguish Reachable, an HTTP error, Unreachable, and an unavailable/pending check. Tap it for the response details, check time, and last reachable time. The main card still opens the website and WUD badges still open container details. A successful HTTP response does not establish that every application feature works or that your current device can connect.
+
+Checks originate from the Clonepage API container, continue while the homepage is closed, and run at most once per minute per saved URL. The homepage polls once per minute and briefly polls more often while checks are pending; Refresh status reads the latest cached results. Checks older than 150 seconds or a failed status refresh appear unknown instead of green. Last-check and last-reachable times survive API restarts in the normal SQLite database.
+
+The checker sends HEAD to the saved website's path, falling back to a streamed GET only for HTTP 405/501. Query strings and fragments are omitted; response bodies are not downloaded. HTTP 2xx/3xx and 401/403 count as reachable (redirects and access restrictions are explained in the details). Other HTTP errors are shown separately from DNS, certificate, timeout, or connection failures. Redirects are not followed. No browser cookies, DSM credentials, or WUD tokens are sent.
+
+For subdomains of `DSM_SERVICE_DOMAIN`, the checker uses the existing `DSM_PROXY_IP` LAN route when configured, keeping the original Host header and verifying HTTPS against the service hostname. Other websites use ordinary DNS. Set `DSM_PROXY_IP` empty to use DNS for the service domain too. This feature adds no credentials or new Docker settings.
+
+Checks are limited to four concurrent requests with a five-second overall deadline each. The endpoint accepts no arbitrary probe URL: only saved, opted-in website shortcuts are checked. Saving a different URL, disabling checks, or deleting the shortcut prevents an in-flight result from being attached to the changed shortcut. Older cached clients preserve the setting when editing a website; changing the action to Copy text disables it.
+
 ## First deployment
 
 Rebuild and deploy the API and web containers together:
@@ -37,13 +51,14 @@ The migration defaults are in `backend/shortcut_defaults.json`. The shared icon/
 ## API and conflicts
 
 - `GET /api/shortcuts`: ordered items and collection revision.
+- `GET /api/shortcuts/availability`: cached results for opted-in website shortcuts; schedules due checks without blocking the response.
 - `POST /api/shortcuts`: create a shortcut.
 - `PUT /api/shortcuts/{id}`: replace its editable fields.
 - `DELETE /api/shortcuts/{id}?revision=N`: delete a shortcut.
 - `PUT /api/shortcuts/order`: save the complete ordered ID list (including all groups).
 - `PUT /api/shortcuts/groups`: rename a group, or clear its name to ungroup its members.
 
-Shortcut fields include optional `group` (up to 48 characters, default empty) and `monitor` (default null). A monitor identifies its `kind` (`project` or `container`), `watcher`, `project`, and either a Compose `service` or raw `container` name. The group endpoint accepts `name`, `new_name`, and `revision`.
+Shortcut fields include optional `group` (up to 48 characters, default empty) and `monitor` (default null), plus `availability` (boolean, default false). A monitor identifies its `kind` (`project` or `container`), `watcher`, `project`, and either a Compose `service` or raw `container` name. The group endpoint accepts `name`, `new_name`, and `revision`.
 
 All writes require the last reviewed revision and run in a transaction. A conflicting edit returns 409 instead of overwriting another device's changes. The editor retains the draft, reloads the latest list, and asks the user to review before saving again. Names, aliases, icon names, six-digit colors, and action types are validated. Website actions accept complete HTTP(S) URLs, including LAN/Tailscale addresses; copy actions store plain text and never execute it.
 

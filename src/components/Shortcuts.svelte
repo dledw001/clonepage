@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte';
-  import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, X } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
+  import { AvailabilityStore, availabilityStatus, emptyAvailability } from '../lib/availability';
   import ServiceSetup from './ServiceSetup.svelte';
   import { ShortcutDrag } from '../lib/shortcut-drag';
   import { groupShortcuts, orderShortcutGroup, type Shortcut, type ShortcutDraft, type ShortcutState, type ShortcutStore } from '../lib/shortcuts';
@@ -16,7 +17,7 @@
   let editorOpen = $state(false);
   let editingId = $state<string | null>(null);
   let draftRevision = 0;
-  const emptyDraft = (): ShortcutDraft => ({ name: '', description: '', aliases: [], icon: 'Link', color: '#a4b9e4', action: 'open', value: '', group: '', monitor: null });
+  const emptyDraft = (): ShortcutDraft => ({ name: '', description: '', aliases: [], icon: 'Link', color: '#a4b9e4', action: 'open', value: '', group: '', monitor: null, availability: false });
   let draft = $state<ShortcutDraft>(emptyDraft());
   let aliases = $state('');
   let iconSearch = $state('');
@@ -25,6 +26,44 @@
   let addButton = $state<HTMLButtonElement>();
   const PreviewIcon = $derived(shortcutIcon(draft.icon));
   const icons = $derived(shortcutCatalog.icons.filter(icon => `${icon.label} ${icon.key} ${icon.keywords}`.toLowerCase().includes(iconSearch.toLowerCase().trim())));
+
+  let availabilityData = $state(emptyAvailability());
+  const availabilityStore = new AvailabilityStore(state => availabilityData = state);
+  const checkedShortcuts = $derived(data.items.filter(item => item.action === 'open' && item.availability));
+  const availabilitySignature = $derived(JSON.stringify(checkedShortcuts.map(item => [item.id, item.value])));
+  let availabilitySelection = $state<string | null>(null);
+  let availabilityNow = $state(Date.now());
+  let availabilityDetails = $state<HTMLDivElement>();
+  let availabilityButton: HTMLButtonElement | undefined;
+  async function closeAvailability() {
+    availabilitySelection = null;
+    await tick();
+    if (availabilityButton?.isConnected) availabilityButton.focus();
+  }
+  async function showAvailability(id: string, button: HTMLButtonElement) {
+    if (availabilitySelection === id) { await closeAvailability(); return; }
+    availabilitySelection = id; availabilityButton = button;
+    await tick();
+    availabilityDetails?.focus({ preventScroll: true });
+    availabilityDetails?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }
+  const selectedService = $derived(checkedShortcuts.find(item => item.id === availabilitySelection));
+  const selectedAvailability = $derived(selectedService ? availabilityStatus(selectedService, availabilityData, availabilityNow) : null);
+  $effect(() => { void availabilitySignature; if (active && checkedShortcuts.length) untrack(() => { void availabilityStore.refresh(); }); });
+  $effect(() => {
+    if (active && checkedShortcuts.length && availabilityData.checking && !availabilityData.loading) {
+      const timer = setTimeout(() => { void availabilityStore.refresh(); }, 2000);
+      return () => clearTimeout(timer);
+    }
+  });
+  onMount(() => {
+    const refresh = () => { if (active && !document.hidden && checkedShortcuts.length) void availabilityStore.refresh(); };
+    const timer = setInterval(refresh, 60000);
+    const clock = setInterval(() => availabilityNow = Date.now(), 15000);
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => { availabilityStore.dispose(); clearInterval(timer); clearInterval(clock); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh); };
+  });
 
   const groups = $derived(groupShortcuts(data.items));
   const arrangedItems = $derived(groups.flatMap(group => group.items));
@@ -156,6 +195,10 @@
   }
 
   function cancelPointer(event: PointerEvent) { if (event.pointerId === gesture?.pointerId) cancelDrag(); }
+  function shortcutKey(event: KeyboardEvent) {
+    if (event.key === 'Escape' && availabilitySelection !== null && !managing) { event.preventDefault(); void closeAvailability(); }
+    dragKey(event);
+  }
   function dragKey(event: KeyboardEvent) {
     if (event.key === 'Escape' && gesture) { event.preventDefault(); cancelDrag(); dragNotice = 'Reordering cancelled.'; }
   }
@@ -181,7 +224,7 @@
   async function edit(item?: Shortcut) {
     managing = true; editorOpen = true; editingId = item?.id ?? null; deleting = null;
     draftRevision = data.revision;
-    draft = item ? { name: item.name, description: item.description, aliases: [...item.aliases], icon: item.icon, color: item.color, action: item.action, value: item.value, group: item.group ?? '', monitor: item.monitor ?? null } : emptyDraft();
+    draft = item ? { name: item.name, description: item.description, aliases: [...item.aliases], icon: item.icon, color: item.color, action: item.action, value: item.value, group: item.group ?? '', monitor: item.monitor ?? null, availability: item.availability ?? false } : emptyDraft();
     aliases = draft.aliases.join(', '); iconSearch = '';
     await tick(); nameInput?.focus();
   }
@@ -201,7 +244,7 @@
   async function remove(id: string) { if (await store.remove(id)) deleting = null; }
 </script>
 
-<svelte:window onpointermove={moveDrag} onpointerup={endDrag} onpointercancel={cancelPointer} onkeydown={dragKey} onblur={cancelDrag} />
+<svelte:window onpointermove={moveDrag} onpointerup={endDrag} onpointercancel={cancelPointer} onkeydown={shortcutKey} onblur={cancelDrag} />
 
 {#snippet card(item: Shortcut)}
   {@const Icon = shortcutIcon(item.icon)}
@@ -241,9 +284,15 @@
                 </article>
               {:else}
                 {@const status = monitorSummary(item.monitor, monitorData, Boolean(monitorError))}
+                {@const serviceStatus = availabilityStatus(item, availabilityData, availabilityNow)}
                 <div class="shortcut-tile">
                   {#if item.action === 'open'}<a class="shortcut-card" style={`--accent:${item.color}`} href={item.value} target="_blank" rel="noopener noreferrer" title={item.description || item.name}>{@render card(item)}</a>
                   {:else}<button class="shortcut-card" style={`--accent:${item.color}`} title={item.description || item.name} onclick={() => onexecute(item)}>{@render card(item)}</button>{/if}
+                  {#if serviceStatus}<button class="availability-indicator" class:reachable={serviceStatus.state === 'reachable'} class:unreachable={serviceStatus.state === 'unreachable'} class:http-error={serviceStatus.state === 'http_error'}
+                    title={serviceStatus.title} aria-label={`Availability for ${item.name}: ${serviceStatus.label}`} aria-expanded={availabilitySelection === item.id}
+                    onclick={event => showAvailability(item.id, event.currentTarget)}>
+                    <span>{#if serviceStatus.state === 'reachable'}<Check size={11} />{:else if serviceStatus.state === 'unreachable'}<X size={11} />{:else if serviceStatus.state === 'http_error'}<TriangleAlert size={11} />{:else}<CircleHelp size={12} />{/if}</span>
+                  </button>{/if}
                   {#if status && status.state !== 'current' && (monitorData || monitorError)}<a class="monitor-badge" class:unknown={status.state === 'unknown'} href={status.href} title={status.detail} aria-label={`View ${item.name} container updates: ${status.detail}`} onclick={event => onmonitor?.(event, status.href)}>{status.label}</a>{/if}
                 </div>
               {/if}
@@ -266,6 +315,15 @@
   {#if data.error && !editorOpen}<p class="shortcut-error" role="alert">{data.error}<button onclick={() => store.refresh()} disabled={data.loading || data.busy}>Try again</button></p>{/if}
   {#if !data.loaded}<p class="shortcut-status" role="status">{data.loading ? 'Loading your places...' : 'Your shortcuts are unavailable.'}</p>{/if}
 
+  {#if !managing && selectedService && selectedAvailability}
+    <div bind:this={availabilityDetails} class="availability-details" role="status" tabindex="-1">
+      <div><strong>{selectedService.name} · {selectedAvailability.label}</strong><p>{selectedAvailability.detail}</p>
+        <small>Checked from the Clonepage server: {selectedAvailability.checkedAt}<br />Last reachable: {selectedAvailability.lastSuccess}</small>
+        <p class="availability-note">Website response only; this does not check every application feature or your device’s connection.</p></div>
+      <div class="availability-actions"><button disabled={availabilityData.loading} onclick={() => availabilityStore.refresh()}>Refresh status</button><button aria-label="Close availability details" onclick={closeAvailability}><X size={15} /></button></div>
+    </div>
+  {/if}
+
   {#if managing && data.loaded}
     <div class="shortcut-manager">
       <div class="manager-heading"><div><h2>Your shortcuts</h2><p>Drag cards within a group, or use the group arrows to arrange sections. Changes save across your devices.</p></div>
@@ -279,12 +337,13 @@
             <div class="editor-fields">
               <label>Name<input bind:this={nameInput} bind:value={draft.name} required maxlength="80" placeholder="qBittorrent" /></label>
               <label>Description<input bind:value={draft.description} maxlength="200" placeholder="Torrent client" /></label>
-              <label>Action<select bind:value={draft.action} onchange={event => { if (event.currentTarget.value === 'copy') draft.monitor = null; }}><option value="open">Open website</option><option value="copy">Copy text</option></select></label>
+              <label>Action<select bind:value={draft.action} onchange={event => { if (event.currentTarget.value === 'copy') { draft.monitor = null; draft.availability = false; } }}><option value="open">Open website</option><option value="copy">Copy text</option></select></label>
               {#if draft.action === 'open'}<label>Website URL<input bind:value={draft.value} type="url" required maxlength="4000" placeholder="https://service.example.com" /></label>
               {:else}<label>Text to copy<textarea bind:value={draft.value} required maxlength="4000" rows="3" placeholder="ssh arch"></textarea></label>{/if}
               <label class="wide">Shortcut group<input bind:value={draft.group} list="shortcut-group-names" maxlength="48" placeholder="Ungrouped" /><small>Choose an existing group or type a new name, such as Media.</small></label>
               <datalist id="shortcut-group-names">{#each groups.filter(group => group.name) as group}<option value={group.name}></option>{/each}</datalist>
               {#if draft.action === 'open'}
+                <label class="availability-option wide"><span><input type="checkbox" bind:checked={draft.availability} />Check service availability</span><small>Check this website from the Clonepage server every minute. Login pages count as reachable.</small></label>
                 <label class="wide">Container monitoring
                   <select value={draft.monitor ? monitorKey(draft.monitor) : ''} onchange={selectMonitor}>
                     <option value="">Not linked</option>
@@ -343,6 +402,22 @@
 </section>
 
 <style>
+  .availability-option > span { display: flex; align-items: center; gap: 9px; }
+  .availability-option input { width: 15px; height: 15px; accent-color: var(--highlight); }
+  .availability-indicator { position: absolute; top: 7px; right: 6px; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
+  .availability-indicator > span { width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; border: 1px solid currentColor; background: var(--bg); }
+  .availability-indicator.reachable { color: var(--success); }
+  .availability-indicator.unreachable { color: #d99393; }
+  .availability-indicator.http-error { color: var(--warning); }
+  .availability-indicator:hover { background: var(--surface-hover); }
+  .availability-details { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin: 0 0 20px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 11px; line-height: 1.8; }
+  .availability-details strong { font-weight: 500; }
+  .availability-details p { margin: 5px 0; }
+  .availability-details small, .availability-note { color: var(--muted); font-size: 10px; }
+  .availability-actions { display: flex; align-items: center; gap: 10px; }
+  .availability-actions button { min-height: 32px; white-space: nowrap; color: var(--highlight); font-size: 10px; }
+  @media (max-width: 540px) { .availability-details { flex-direction: column; } .availability-actions { align-self: flex-end; } }
+
   .shortcut-groups { display: grid; gap: 23px; }
   .shortcut-group { min-width: 0; }
   .grouped .shortcut-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }

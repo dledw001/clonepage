@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from metadata import fetch_title
 from nas_temps import NasTempsGateway, router as infrastructure_router
 from wud import WudGateway, router as containers_router
+from availability import AvailabilityGateway, initialize_availability, router as availability_router
 from feeds import initialize_feeds, router as feeds_router
 from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_copies, router as saved_copies_router
 
@@ -216,6 +217,7 @@ async def lifespan(app: FastAPI):
     initialize_pdf_progress()
     initialize_shortcuts()
     initialize_services()
+    initialize_availability()
     app.state.dsm_sessions = DSMSessions()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
@@ -228,10 +230,17 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(5.0, connect=2.0),
         follow_redirects=False,
         trust_env=False,
-    ) as wud_client:
+    ) as wud_client, httpx.AsyncClient(
+        timeout=httpx.Timeout(4.0, connect=2.0),
+        limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
+        follow_redirects=False, trust_env=False, verify=True,
+    ) as availability_client:
         app.state.nas_temps = NasTempsGateway(client)
         app.state.wud = WudGateway(wud_client, os.getenv("WUD_URL", "http://10.0.0.149:3000"),
                                    os.getenv("WUD_API_TOKEN", ""), os.getenv("WUD_PUBLIC_URL", ""))
+        config = app.state.dsm_sessions.config
+        app.state.availability = AvailabilityGateway(availability_client, config.domain, config.proxy_ip)
+        availability_poll = asyncio.create_task(app.state.availability.run())
         async def reap_dsm_sessions():
             while True:
                 await asyncio.sleep(15)
@@ -241,6 +250,9 @@ async def lifespan(app: FastAPI):
         try:
             yield
         finally:
+            availability_poll.cancel()
+            with suppress(asyncio.CancelledError):
+                await availability_poll
             reaper.cancel()
             with suppress(asyncio.CancelledError):
                 await reaper
@@ -260,6 +272,7 @@ app.include_router(feeds_router)
 app.include_router(saved_copies_router)
 app.include_router(uploads_router)
 app.include_router(progress_router)
+app.include_router(availability_router)
 app.include_router(shortcuts_router)
 app.include_router(dsm_router)
 

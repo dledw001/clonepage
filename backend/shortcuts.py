@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StrictBool, field_validator, model_validator
 
 router = APIRouter(prefix="/api/shortcuts", tags=["Shortcuts"])
 CATALOG = json.loads(Path(__file__).with_name("shortcut_catalog.json").read_text(encoding="utf-8"))
@@ -53,6 +53,8 @@ def initialize_shortcuts():
             db.execute("ALTER TABLE shortcuts ADD COLUMN group_name TEXT NOT NULL DEFAULT ''")
         if "monitor" not in columns:
             db.execute("ALTER TABLE shortcuts ADD COLUMN monitor TEXT DEFAULT NULL")
+        if "availability" not in columns:
+            db.execute("ALTER TABLE shortcuts ADD COLUMN availability INTEGER NOT NULL DEFAULT 0")
         if db.execute("SELECT 1 FROM shortcut_settings WHERE id = 1").fetchone():
             return
         defaults = json.loads(Path(__file__).with_name("shortcut_defaults.json").read_text(encoding="utf-8"))
@@ -108,6 +110,7 @@ class ShortcutFields(BaseModel):
     value: str = Field(min_length=1, max_length=4000)
     group: str = Field(default="", max_length=48)
     monitor: MonitorTarget | None = None
+    availability: StrictBool = False
 
     @field_validator("group")
     @classmethod
@@ -144,6 +147,8 @@ class ShortcutFields(BaseModel):
 
     @model_validator(mode="after")
     def valid_target(self):
+        if self.action == "copy" and self.availability:
+            raise ValueError("Availability checks are available for website shortcuts.")
         if self.action == "copy" and self.monitor is not None:
             raise ValueError("Container monitoring is available for website shortcuts.")
         if self.action == "open":
@@ -181,6 +186,7 @@ def snapshot(db):
         item = dict(row)
         item["aliases"] = json.loads(item["aliases"])
         item.pop("position")
+        item["availability"] = bool(item["availability"])
         item["group"] = item.pop("group_name")
         item["monitor"] = json.loads(item["monitor"]) if item["monitor"] else None
         items.append(item)
@@ -244,15 +250,15 @@ def list_shortcuts():
 def create_shortcut(item: ShortcutWrite):
     # language=SQL
     insert_sql = """
-    INSERT INTO shortcuts (id, name, description, aliases, icon, color, action, value, position, group_name, monitor)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO shortcuts (id, name, description, aliases, icon, color, action, value, position, group_name, monitor, availability)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     with database() as db:
         check_revision(db, item.revision)
         if db.execute("SELECT COUNT(*) FROM shortcuts").fetchone()[0] >= MAX_SHORTCUTS:
             raise HTTPException(422, "You can save up to 100 shortcuts.")
         position = db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM shortcuts").fetchone()[0]
-        db.execute(insert_sql, (uuid4().hex, *values(item), position, *organization_values(db, item)))
+        db.execute(insert_sql, (uuid4().hex, *values(item), position, *organization_values(db, item), int(item.availability)))
         return changed(db)
 
 
@@ -271,12 +277,12 @@ def reorder_shortcuts(order: ShortcutOrder):
 def update_shortcut(shortcut_id: str, item: ShortcutWrite):
     # language=SQL
     update_sql = """
-    UPDATE shortcuts SET name = ?, description = ?, aliases = ?, icon = ?, color = ?, action = ?, value = ?, group_name = ?, monitor = ?
+    UPDATE shortcuts SET name = ?, description = ?, aliases = ?, icon = ?, color = ?, action = ?, value = ?, group_name = ?, monitor = ?, availability = ?
     WHERE id = ?
     """
     with database() as db:
         check_revision(db, item.revision)
-        existing = db.execute("SELECT group_name, monitor FROM shortcuts WHERE id = ?", (shortcut_id,)).fetchone()
+        existing = db.execute("SELECT group_name, monitor, availability FROM shortcuts WHERE id = ?", (shortcut_id,)).fetchone()
         if existing is None:
             raise HTTPException(404, "This shortcut no longer exists.")
         group, monitor = organization_values(db, item)
@@ -285,7 +291,10 @@ def update_shortcut(shortcut_id: str, item: ShortcutWrite):
             group = existing["group_name"]
         if "monitor" not in item.model_fields_set and item.action == "open":
             monitor = existing["monitor"]
-        db.execute(update_sql, (*values(item), group, monitor, shortcut_id))
+        availability = item.availability
+        if "availability" not in item.model_fields_set and item.action == "open":
+            availability = bool(existing["availability"])
+        db.execute(update_sql, (*values(item), group, monitor, int(availability), shortcut_id))
         return changed(db)
 
 

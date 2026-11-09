@@ -40,7 +40,7 @@ class ShortcutTests(unittest.TestCase):
     def test_migration_preserves_all_seven_current_shortcuts(self):
         data = self.read()
         expected = json.loads(Path(shortcuts.__file__).with_name('shortcut_defaults.json').read_text(encoding='utf-8'))
-        expected = [dict(item, group='', monitor=None) for item in expected]
+        expected = [dict(item, group='', monitor=None, availability=False) for item in expected]
         self.assertEqual(data, {'items': expected, 'revision': 0})
         self.assertEqual(data['items'][0]['value'], 'https://dsm.dledwith.com')
         self.assertEqual(data['items'][2]['value'], 'https://qbit.dledwith.com')
@@ -150,11 +150,12 @@ class ShortcutTests(unittest.TestCase):
             db.execute("UPDATE shortcut_settings SET revision = 8")
             db.execute("ALTER TABLE shortcuts DROP COLUMN group_name")
             db.execute("ALTER TABLE shortcuts DROP COLUMN monitor")
+            db.execute("ALTER TABLE shortcuts DROP COLUMN availability")
         shortcuts.initialize_shortcuts()
         data=self.read()
         self.assertEqual(data['revision'],8)
         self.assertEqual(data['items'][0]['name'],'My downloads')
-        self.assertTrue(all(item['group']=='' and item['monitor'] is None for item in data['items']))
+        self.assertTrue(all(item['group']=='' and item['monitor'] is None and item['availability'] is False for item in data['items']))
         self.assertEqual(len(data['items']),7)
 
     def test_older_client_update_keeps_organization_and_copy_conversion_clears_monitoring(self):
@@ -199,6 +200,24 @@ class ShortcutTests(unittest.TestCase):
             {'action':'copy','monitor':{'kind':'project','watcher':'local','project':'media'}},
         ]:
             with self.subTest(changes=changes): self.assertEqual(self.create(changes).status_code,422)
+        self.assertEqual(self.read(),before)
+
+    def test_availability_setting_persists_and_old_clients_preserve_it(self):
+        data=self.create({'availability':True}).json(); saved=data['items'][-1]
+        self.assertIs(saved['availability'],True)
+        shortcuts.initialize_shortcuts()
+        self.assertIs(self.read()['items'][-1]['availability'],True)
+        old=self.draft();old['revision']=data['revision']
+        edited=self.client.put('/api/shortcuts/'+saved['id'],json=old)
+        self.assertIs(edited.json()['items'][-1]['availability'],True)
+        old.update(action='copy',value='ssh nas',revision=edited.json()['revision'])
+        copied=self.client.put('/api/shortcuts/'+saved['id'],json=old)
+        self.assertIs(copied.json()['items'][-1]['availability'],False)
+
+    def test_invalid_availability_settings_do_not_change_shortcuts(self):
+        before=self.read()
+        for changes in [{'availability':'yes'}, {'availability':1}, {'action':'copy','availability':True}]:
+            self.assertEqual(self.create(changes).status_code,422)
         self.assertEqual(self.read(),before)
 
 

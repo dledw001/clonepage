@@ -1,7 +1,7 @@
 export type MonitorTarget = { kind: 'container' | 'project'; watcher: string; project: string | null;
   service?: string | null; container?: string | null };
 export type Shortcut = { id: string; name: string; description: string; aliases: string[]; icon: string;
-  color: string; action: 'open' | 'copy'; value: string; group?: string; monitor?: MonitorTarget | null };
+  color: string; action: 'open' | 'copy'; value: string; group?: string; monitor?: MonitorTarget | null; availability?: boolean };
 export type ShortcutDraft = Omit<Shortcut, 'id'>;
 export type ShortcutSnapshot = { items: Shortcut[]; revision: number };
 export type ShortcutState = ShortcutSnapshot & { loaded: boolean; loading: boolean; busy: boolean; conflict: boolean; error: string };
