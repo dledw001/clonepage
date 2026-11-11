@@ -2,6 +2,8 @@ services:
   api:
     build: ./backend
     restart: unless-stopped
+    labels:
+      - "wud.watch=false"
     extra_hosts:
       # Reach DSM over the LAN while keeping its verified HTTPS hostname.
       dsm.dledwith.com: "10.0.0.149"
@@ -25,6 +27,8 @@ services:
       # Avoid DNS failures in the NAS BuildKit bridge during npm downloads.
       network: host
     restart: unless-stopped
+    labels:
+      - "wud.watch=false"
     ports:
       - "127.0.0.1:8765:80"
     depends_on:
@@ -33,6 +37,8 @@ services:
   worker:
     build: ./backend
     restart: unless-stopped
+    labels:
+      - "wud.watch=false"
     command: ["python", "-u", "worker.py"]
     # Let the current article capture or feed refresh finish before Docker kills it.
     stop_grace_period: 90s
