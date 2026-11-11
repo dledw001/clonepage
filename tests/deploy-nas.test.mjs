@@ -38,9 +38,13 @@ printf '%s\\n' "$*" >> "$DEPLOY_TEST_ROOT/docker-calls"
 case "$*" in
   'compose config --quiet') [ "$DEPLOY_TEST_FAIL" != config ] || exit 41 ;;
   'compose build') [ "$DEPLOY_TEST_FAIL" != build ] || exit 42 ;;
+  'compose stop worker web api') [ "$DEPLOY_TEST_FAIL" != stop ] || exit 44 ;;
+  'compose rm -f worker web api') [ "$DEPLOY_TEST_FAIL" != remove ] || exit 45 ;;
   'compose up -d --no-build') [ "$DEPLOY_TEST_FAIL" != start ] || exit 43 ;;
   'compose ps -q '*) printf 'container-%s\\n' "$4" ;;
   inspect*) if [ "$DEPLOY_TEST_FAIL" = worker ] && [ "$4" = container-worker ]; then printf 'false\\n'; else printf 'true\\n'; fi ;;
+  'compose ps'|'compose logs --tail=40 api web worker') : ;;
+  *) printf 'Unexpected Docker command: %s\\n' "$*" >&2; exit 99 ;;
 esac
 `);
   executable('curl', '[ "$DEPLOY_TEST_FAIL" != health ]\n');
@@ -82,10 +86,13 @@ check('NAS deployment builds before restarting, checks readiness, then skips the
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(f.marker(), f.revision());
   const calls = f.calls();
-  assert.ok(calls.includes('compose build'));
-  assert.ok(calls.includes('compose up -d --no-build'));
-  assert.ok(calls.indexOf('compose build') < calls.indexOf('compose up -d --no-build'));
-  assert.ok(!calls.some(call => call.includes('--force-recreate')), 'unchanged services are not forcibly replaced');
+  assert.deepEqual(calls.slice(0, 5), [
+    'compose config --quiet',
+    'compose build',
+    'compose stop worker web api',
+    'compose rm -f worker web api',
+    'compose up -d --no-build',
+  ], 'build before downtime, stop gracefully, then remove only Clonepage containers before creating replacements');
   assert.ok(calls.some(call => call.includes('container-worker')));
   assert.equal(readFileSync(join(f.folder, 'owners'), 'utf8').trim(), 'fixture-owner');
   result = f.run();
@@ -103,7 +110,7 @@ check('NAS deployment fetches and fast-forwards to a new remote commit', f => {
   assert.equal(f.revision(), target);
 });
 
-for (const [mode, status] of [['config', 41], ['build', 42], ['start', 43], ['health', 1], ['worker', 1]]) {
+for (const [mode, status] of [['config', 41], ['build', 42], ['stop', 44], ['remove', 45], ['start', 43], ['health', 1], ['worker', 1]]) {
   check(`NAS deployment retains the previous successful commit after ${mode} failure and retries without another push`, f => {
     assert.equal(f.run().status, 0);
     const previous = f.marker();
@@ -113,9 +120,12 @@ for (const [mode, status] of [['config', 41], ['build', 42], ['start', 43], ['he
     assert.equal(result.status, status, result.stderr);
     assert.equal(f.marker(), previous);
     assert.equal(f.revision(), target, 'checkout may advance even when deployment fails');
-    if (mode === 'build' || mode === 'config') {
-      assert.ok(!f.calls().slice(before).some(call => call.startsWith('compose up')), 'no restart after failed build/config');
-    }
+    const mutations = f.calls().slice(before).filter(call => /^compose (stop|rm|up) /.test(call));
+    const expectedMutations = mode === 'config' || mode === 'build' ? []
+      : mode === 'stop' ? ['compose stop worker web api']
+      : mode === 'remove' ? ['compose stop worker web api', 'compose rm -f worker web api']
+      : ['compose stop worker web api', 'compose rm -f worker web api', 'compose up -d --no-build'];
+    assert.deepEqual(mutations, expectedMutations, 'a failed stage must prevent later container changes');
     assert.match(result.stderr, /Deployment failed/);
     assert.equal(f.run().status, 0);
     assert.equal(f.marker(), target);

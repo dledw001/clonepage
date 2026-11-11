@@ -40,12 +40,14 @@ These defaults match this installation: `/volume2/docker/clonepage`, user `dledw
 - Git fetches `origin/main` and fast-forwards only. Local commits ahead of or diverged from the remote stop deployment without resetting or discarding work.
 - Compose configuration is validated and **all images finish building before any containers are recreated**. A build failure leaves the running containers alone.
 - Builds set `BUILDX_GIT_INFO=false` to skip optional Buildx Git metadata lookup under root. The script still records the successfully deployed commit independently. This avoids the commit-information warning when Buildx cannot read a checkout owned by `dledwith`.
-- Startup uses `docker compose up -d --no-build`, preserving the existing mounted data. Compose replaces containers when their image or configuration changes; unchanged containers are not forcibly recreated. The script never calls `compose down`.
+- After building, the script runs `docker compose stop worker web api`, `docker compose rm -f worker web api`, then `docker compose up -d --no-build`. Removing the old containers before creating replacements avoids Compose's temporary ID-prefixed replacement names, which Container Manager has displayed as stale entries on this NAS. This is a workaround to verify on the NAS, not a guaranteed fix for Synology's inventory behavior.
+- Every newly deployed commit restarts all three Clonepage services, even when some images are unchanged. There is downtime during shutdown and startup, potentially including the worker's 90-second grace period. Already-deployed commits still skip all build/stop/remove/start operations.
+- Removal is limited to Clonepage's `worker`, `web`, and `api` containers. The script preserves the project network and the bind-mounted `data` directory; it never calls `compose down`, removes volumes, or restarts Container Manager.
 - The worker handles SIGTERM and SIGINT by finishing its active article capture or feed refresh without starting another job. Idle waits and database-initialization retries check for shutdown every 100 ms. Compose allows up to 90 seconds for shutdown; Docker can still force-stop a stuck or unusually long task after that limit. Interrupted articles are recovered on startup, and interrupted feed leases expire automatically.
 - The script waits for `api`, `web`, and `worker` to be running and for `http://127.0.0.1:8765/api/shortcuts` to respond successfully through Caddy and the API.
 - The deployed commit is recorded only after those checks succeed. If building, startup, or readiness fails after Git advances, the next scheduled run retries that checkout even without another push.
 
-This script validates configuration, builds images, and checks startup; it does not run the application's full test suite. A failed startup/readiness check can leave the new containers partially running. The failure is reported rather than automatically rolling back code or database migrations.
+This script validates configuration, builds images, and checks startup; it does not run the application's full test suite. A failed stop, removal, startup, or readiness check stops the deployment without advancing its successful-commit marker. Once shutdown begins, a failure can leave Clonepage partially or entirely unavailable until the next successful retry. The failure is reported rather than automatically rolling back code or database migrations.
 
 Push unfinished work to another branch. Every commit pushed to `main` becomes eligible for automatic deployment. Disable the scheduled task before a manual rollback or other maintenance so the next poll does not redeploy `main`.
 
@@ -59,7 +61,18 @@ The log rotates on a later run when it exceeds 1 MiB, keeping one previous log a
 
 `data/deployment/deployed-commit` contains the last commit that passed deployment checks. On a startup-check failure it retains the previous successful commit; it is not a guarantee that all old containers are still running.
 
-The script stays in version control. When it pulls an update to itself, the next scheduled invocation uses the updated script.
+The script stays in version control. When it pulls an update to itself, the next scheduled invocation uses the updated script. The invocation doing the pull continues using its already-parsed deployment sequence.
+
+To test a deployment-script change on its first deployment, disable the scheduled task before pushing. After committing and pushing the change, pull it manually and invoke the updated script:
+
+```sh
+cd /volume2/docker/clonepage
+git pull --ff-only
+sudo /bin/sh /volume2/docker/clonepage/scripts/deploy-nas.sh
+sudo docker compose ps -a
+```
+
+Check the log for `Stop`/`Stopped`, `Remove`/`Removed`, and `Create`/`Created` operations before startup, and compare the final names with Container Manager. Re-enable the scheduled task after verification. Existing stale entries may still require the previously successful package restart to clear; avoid automatically restarting Container Manager during deployments because it would affect other projects.
 
 ## Local verification
 
@@ -67,7 +80,7 @@ The script stays in version control. When it pulls an update to itself, the next
 node --test tests/deploy-nas.test.mjs
 ```
 
-These tests run on Linux with real temporary Git repositories and file locks, and simulated Docker, user switching, and HTTP checks. They cover skipping unchanged commits, fast-forward updates, failures and retries, checkout protection, worker/readiness checks, and overlapping tasks. They do not deploy to the NAS. They skip on systems without Linux, Git, or `flock`.
+These tests run on Linux with real temporary Git repositories and file locks, and simulated Docker, user switching, and HTTP checks. They cover build/stop/remove/start ordering, stopping after a failed stage, skipping unchanged commits, fast-forward updates, failures and retries, checkout protection, worker/readiness checks, and overlapping tasks. They do not deploy to the NAS. They skip on systems without Linux, Git, or `flock`.
 
 Worker shutdown tests (run with the backend dependencies installed):
 

@@ -77,7 +77,11 @@ main() {
     # Finish all builds before changing running containers. Never run compose down.
     # The script records the revision itself; skip Buildx Git lookups as root.
     BUILDX_GIT_INFO=false docker compose build
-    # Compose replaces only containers whose image or configuration changed.
+    # Remove the stopped containers first so Compose creates their final names
+    # directly, avoiding temporary replacement names cached by DSM. Keep the
+    # project network and mounted data; only these three services are removed.
+    docker compose stop worker web api
+    docker compose rm -f worker web api
     docker compose up -d --no-build
 
     attempt=1
