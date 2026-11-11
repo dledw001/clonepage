@@ -34,6 +34,8 @@ services:
     build: ./backend
     restart: unless-stopped
     command: ["python", "-u", "worker.py"]
+    # Let the current article capture or feed refresh finish before Docker kills it.
+    stop_grace_period: 90s
     environment:
       READING_DB_PATH: /data/reading.sqlite3
     volumes:

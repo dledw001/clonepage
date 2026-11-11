@@ -77,7 +77,8 @@ main() {
     # Finish all builds before changing running containers. Never run compose down.
     # The script records the revision itself; skip Buildx Git lookups as root.
     BUILDX_GIT_INFO=false docker compose build
-    docker compose up -d --no-build --force-recreate
+    # Compose replaces only containers whose image or configuration changed.
+    docker compose up -d --no-build
 
     attempt=1
     while [ "$attempt" -le 12 ]; do

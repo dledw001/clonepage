@@ -1,4 +1,5 @@
 import logging
+import signal
 import time
 import errno
 import httpx
@@ -20,27 +21,52 @@ MAX_INDEX_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 60
 
 
+class ShutdownRequest:
+    """A signal-safe flag with short, interruptible polling waits."""
+
+    def __init__(self):
+        self.requested = False
+
+    def set(self):
+        # A signal handler must not acquire threading locks: it could interrupt
+        # the same thread while that lock is already held.
+        self.requested = True
+
+    def is_set(self) -> bool:
+        return self.requested
+
+    def wait(self, seconds: float) -> bool:
+        deadline = time.monotonic() + seconds
+        while not self.requested:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(remaining, 0.1))
+        return self.requested
+
+
 def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def wait_for_schema():
+def wait_for_schema(stop_requested: ShutdownRequest) -> bool:
     # language=SQL
     check_index_schema_sql = """
     SELECT index_status, index_attempts, index_retry_at
     FROM articles LIMIT 0
     """
-    while True:
+    while not stop_requested.is_set():
         try:
             with database() as db:
                 db.execute(check_index_schema_sql)
                 db.execute("SELECT rowid FROM article_fts LIMIT 0")
                 db.execute("SELECT id FROM feed_subscriptions LIMIT 0")
                 db.execute("SELECT copy_status,article_job,source_kind,upload_filename FROM articles LIMIT 0")
-            return
+            return True
         except Exception:
             logging.info("Waiting for database initialization...")
-            time.sleep(3)
+            stop_requested.wait(3)
+    return False
 
 
 def next_retry(attempt):
@@ -198,11 +224,15 @@ def process_next() -> bool:
         remove_copy(row["copy_path"])
     return True
 
-def run_cycle() -> bool:
+def run_cycle(stop_requested: ShutdownRequest | None = None) -> bool:
+    stop_requested = stop_requested if stop_requested is not None else ShutdownRequest()
     worked = False
     # One task from each queue per cycle: a busy or failing feed cannot starve
     # saved-article indexing, and a long article queue cannot starve feeds.
     for task in (process_due_feed, process_next):
+        # Finish the active task, but never start another queue after shutdown.
+        if stop_requested.is_set():
+            break
         try:
             worked = task() or worked
         except Exception:
@@ -211,27 +241,41 @@ def run_cycle() -> bool:
 
 
 def main():
-    wait_for_schema()
+    stop_requested = ShutdownRequest()
 
-    # Recover interrupted jobs after container restarts.
-    with database() as db:
-        # language=SQL
-        recover_interrupted_jobs_sql = """
-        UPDATE articles SET index_status='pending',article_job=NULL,
-            copy_status=CASE WHEN copy_status='processing' THEN 'pending' ELSE copy_status END,copy_job=NULL
-        WHERE index_status='processing' OR copy_status='processing'
-        """
-        db.execute(recover_interrupted_jobs_sql)
+    def request_stop(signum, frame):
+        # Keep the handler minimal: no database work, logging, or exceptions that
+        # could interrupt a transaction or saved-copy publication.
+        stop_requested.set()
 
-    logging.info("Clonepage article and feed worker started")
+    previous_handlers = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        if not wait_for_schema(stop_requested) or stop_requested.is_set():
+            return
 
-    while True:
-        try:
-            if not run_cycle():
-                time.sleep(3)
-        except Exception:
-            logging.exception("Unexpected worker error")
-            time.sleep(5)
+        # Recover interrupted jobs after container restarts.
+        with database() as db:
+            # language=SQL
+            recover_interrupted_jobs_sql = """
+            UPDATE articles SET index_status='pending',article_job=NULL,
+                copy_status=CASE WHEN copy_status='processing' THEN 'pending' ELSE copy_status END,copy_job=NULL
+            WHERE index_status='processing' OR copy_status='processing'
+            """
+            db.execute(recover_interrupted_jobs_sql)
+
+        logging.info("Clonepage article and feed worker started")
+
+        while not stop_requested.is_set():
+            try:
+                if not run_cycle(stop_requested):
+                    stop_requested.wait(3)
+            except Exception:
+                logging.exception("Unexpected worker error")
+                stop_requested.wait(5)
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
+        logging.info("Clonepage article and feed worker stopped")
 
 
 if __name__ == "__main__":

@@ -40,7 +40,8 @@ These defaults match this installation: `/volume2/docker/clonepage`, user `dledw
 - Git fetches `origin/main` and fast-forwards only. Local commits ahead of or diverged from the remote stop deployment without resetting or discarding work.
 - Compose configuration is validated and **all images finish building before any containers are recreated**. A build failure leaves the running containers alone.
 - Builds set `BUILDX_GIT_INFO=false` to skip optional Buildx Git metadata lookup under root. The script still records the successfully deployed commit independently. This avoids the commit-information warning when Buildx cannot read a checkout owned by `dledwith`.
-- Startup uses `docker compose up -d --no-build --force-recreate`, preserving the existing mounted data. The script never calls `compose down`.
+- Startup uses `docker compose up -d --no-build`, preserving the existing mounted data. Compose replaces containers when their image or configuration changes; unchanged containers are not forcibly recreated. The script never calls `compose down`.
+- The worker handles SIGTERM and SIGINT by finishing its active article capture or feed refresh without starting another job. Idle waits and database-initialization retries check for shutdown every 100 ms. Compose allows up to 90 seconds for shutdown; Docker can still force-stop a stuck or unusually long task after that limit. Interrupted articles are recovered on startup, and interrupted feed leases expire automatically.
 - The script waits for `api`, `web`, and `worker` to be running and for `http://127.0.0.1:8765/api/shortcuts` to respond successfully through Caddy and the API.
 - The deployed commit is recorded only after those checks succeed. If building, startup, or readiness fails after Git advances, the next scheduled run retries that checkout even without another push.
 
@@ -67,3 +68,11 @@ node --test tests/deploy-nas.test.mjs
 ```
 
 These tests run on Linux with real temporary Git repositories and file locks, and simulated Docker, user switching, and HTTP checks. They cover skipping unchanged commits, fast-forward updates, failures and retries, checkout protection, worker/readiness checks, and overlapping tasks. They do not deploy to the NAS. They skip on systems without Linux, Git, or `flock`.
+
+Worker shutdown tests (run with the backend dependencies installed):
+
+```sh
+python -m unittest discover -s backend/tests -p test_worker_shutdown.py -v
+```
+
+On Linux, these send real SIGTERM/SIGINT signals to worker subprocesses with temporary databases. They check idle shutdown, database startup retries, error backoff, completing and publishing an active saved article, and completing a feed refresh without claiming the next article. The signal tests skip on Windows; the queue-boundary tests still run.

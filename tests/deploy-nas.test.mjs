@@ -38,7 +38,7 @@ printf '%s\\n' "$*" >> "$DEPLOY_TEST_ROOT/docker-calls"
 case "$*" in
   'compose config --quiet') [ "$DEPLOY_TEST_FAIL" != config ] || exit 41 ;;
   'compose build') [ "$DEPLOY_TEST_FAIL" != build ] || exit 42 ;;
-  'compose up -d --no-build --force-recreate') [ "$DEPLOY_TEST_FAIL" != start ] || exit 43 ;;
+  'compose up -d --no-build') [ "$DEPLOY_TEST_FAIL" != start ] || exit 43 ;;
   'compose ps -q '*) printf 'container-%s\\n' "$4" ;;
   inspect*) if [ "$DEPLOY_TEST_FAIL" = worker ] && [ "$4" = container-worker ]; then printf 'false\\n'; else printf 'true\\n'; fi ;;
 esac
@@ -82,7 +82,10 @@ check('NAS deployment builds before restarting, checks readiness, then skips the
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(f.marker(), f.revision());
   const calls = f.calls();
-  assert.ok(calls.indexOf('compose build') < calls.indexOf('compose up -d --no-build --force-recreate'));
+  assert.ok(calls.includes('compose build'));
+  assert.ok(calls.includes('compose up -d --no-build'));
+  assert.ok(calls.indexOf('compose build') < calls.indexOf('compose up -d --no-build'));
+  assert.ok(!calls.some(call => call.includes('--force-recreate')), 'unchanged services are not forcibly replaced');
   assert.ok(calls.some(call => call.includes('container-worker')));
   assert.equal(readFileSync(join(f.folder, 'owners'), 'utf8').trim(), 'fixture-owner');
   result = f.run();
