@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { ArrowUpRight, ChevronDown, Container, RefreshCw, TriangleAlert } from '@lucide/svelte';
   import { fetchJson } from '../lib/infrastructure';
   import { containerVersion, effectiveState, groupContainers, monitorMatches, parseMonitorTarget, wudAge, type ContainerSnapshot } from '../lib/container-updates';
@@ -50,7 +50,11 @@
     }
   }
 
-  $effect(() => { void revision; if (mounted) void refresh(); });
+  $effect(() => {
+    void revision;
+    // Track the parent's refresh revision, not the loading flag read by refresh.
+    if (mounted) untrack(() => { void refresh(); });
+  });
 
   $effect(() => {
     const target = focusTarget;
