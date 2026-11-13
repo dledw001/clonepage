@@ -5,6 +5,7 @@
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
   import HackerNews from './components/HackerNews.svelte';
+  import Weather from './components/Weather.svelte';
   import NeedsAttention from './components/NeedsAttention.svelte';
   import ContinueReading from './components/ContinueReading.svelte';
   import HomeCustomize from './components/HomeCustomize.svelte';
@@ -351,6 +352,7 @@
         {#if section.visible||homeFocus===section.id}
           <div id={`home-${section.id}`} class="home-section">
             {#if section.id==='attention'}<NeedsAttention active={page==='home'} onnavigate={navigate}/>
+            {:else if section.id==='weather'}<Weather active={page==='home'} preferences={layoutState.settings.weather}/>
             {:else if section.id==='shortcuts'}<Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} onmonitor={navigate} active={page==='home'}/>
             {:else if section.id==='continue'}<ContinueReading active={page==='home'} previewCount={layoutState.settings.previews.continue_reading} onnavigate={navigate}/>
             {:else if section.id==='reading'}<ReadingList active={page==='home'} previewCount={layoutState.settings.previews.reading} onnavigate={navigate}/>

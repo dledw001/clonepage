@@ -1,14 +1,15 @@
 """Shared homepage preferences, continue-reading items, and an attention summary."""
 import json
+import re
 from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 router = APIRouter(prefix='/api/home', tags=['Homepage'])
-SECTION_IDS = ('attention', 'shortcuts', 'continue', 'reading', 'feeds', 'hacker-news')
+SECTION_IDS = ('attention', 'weather', 'shortcuts', 'continue', 'reading', 'feeds', 'hacker-news')
 
 
 def database():
@@ -18,7 +19,7 @@ def database():
 
 class Section(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    id: Literal['attention', 'shortcuts', 'continue', 'reading', 'feeds', 'hacker-news']
+    id: Literal['attention', 'weather', 'shortcuts', 'continue', 'reading', 'feeds', 'hacker-news']
     visible: StrictBool = True
 
 
@@ -36,12 +37,27 @@ class HNPreview(BaseModel):
     window: Literal['24h', '7d', '30d'] = '24h'
 
 
+class WeatherSettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    location: str = Field(default='22206', min_length=1, max_length=80, strict=True)
+    units: Literal['F', 'C'] = 'F'
+
+    @field_validator('location')
+    @classmethod
+    def valid_location(cls, value):
+        value = value.strip()
+        if not value or not re.fullmatch(r"[\w ,.'()\-]+", value) or any(ord(char)<32 for char in value):
+            raise ValueError('Enter a US ZIP code or city and country.')
+        return value
+
+
 class HomeSettings(BaseModel):
     model_config = ConfigDict(extra='forbid')
     show_clock: StrictBool = True
     sections: list[Section] = Field(default_factory=lambda: [Section(id=key) for key in SECTION_IDS])
     previews: Previews = Field(default_factory=Previews)
     hacker_news: HNPreview = Field(default_factory=HNPreview)
+    weather: WeatherSettings = Field(default_factory=WeatherSettings)
 
     @model_validator(mode='after')
     def complete_sections(self):
@@ -68,6 +84,16 @@ def initialize_home():
     with database() as db:
         db.execute(schema_sql)
         db.execute('INSERT OR IGNORE INTO home_settings(id,revision,payload) VALUES (1,0,?)', (HomeSettings().model_dump_json(),))
+        row = db.execute('SELECT payload FROM home_settings WHERE id=1').fetchone()
+        payload = json.loads(row['payload'])
+        sections = payload.get('sections', [])
+        legacy = set(SECTION_IDS)-{'weather'}
+        if len(sections)==len(legacy) and {section.get('id') for section in sections}==legacy:
+            index = next(index for index, section in enumerate(sections) if section['id']=='attention')+1
+            sections.insert(index, {'id': 'weather', 'visible': True})
+        normalized = HomeSettings.model_validate(payload).model_dump()
+        if normalized != json.loads(row['payload']):
+            db.execute('UPDATE home_settings SET payload=?,revision=revision+1 WHERE id=1', (json.dumps(normalized),))
 
 
 def layout_snapshot(db):

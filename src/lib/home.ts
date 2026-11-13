@@ -1,15 +1,17 @@
-export type HomeSectionId = 'attention' | 'shortcuts' | 'continue' | 'reading' | 'feeds' | 'hacker-news';
+import type { WeatherPreferences } from './weather';
+export type HomeSectionId = 'attention' | 'weather' | 'shortcuts' | 'continue' | 'reading' | 'feeds' | 'hacker-news';
 export type HomeSettings = {
   show_clock: boolean;
+  weather: WeatherPreferences;
   sections: { id: HomeSectionId; visible: boolean }[];
   previews: { reading: number; feeds: number; hacker_news: number; continue_reading: number };
   hacker_news: { view: 'front' | 'top' | 'discussed'; window: '24h' | '7d' | '30d' };
 };
 export type LayoutSnapshot = { revision: number; settings: HomeSettings };
 export type LayoutState = LayoutSnapshot & { loaded: boolean; loading: boolean; busy: boolean; conflict: boolean; error: string };
-export const sectionLabels: Record<HomeSectionId, string> = { attention:'Needs attention', shortcuts:'Your places', continue:'Continue reading', reading:'Reading list', feeds:'Feeds', 'hacker-news':'Hacker News' };
+export const sectionLabels: Record<HomeSectionId, string> = { attention:'Needs attention', weather:'Weather', shortcuts:'Your places', continue:'Continue reading', reading:'Reading list', feeds:'Feeds', 'hacker-news':'Hacker News' };
 export function defaultHomeSettings(): HomeSettings {
-  return { show_clock:true, sections: (['attention','shortcuts','continue','reading','feeds','hacker-news'] as HomeSectionId[]).map(id => ({id,visible:true})),
+  return { show_clock:true, weather:{location:'22206',units:'F'}, sections: (['attention','weather','shortcuts','continue','reading','feeds','hacker-news'] as HomeSectionId[]).map(id => ({id,visible:true})),
     previews:{reading:3,feeds:3,hacker_news:3,continue_reading:3}, hacker_news:{view:'top',window:'24h'} };
 }
 export function copySettings(settings: HomeSettings): HomeSettings { return JSON.parse(JSON.stringify(settings)); }

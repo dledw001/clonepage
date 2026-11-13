@@ -19,8 +19,8 @@ test('homepage, customization, continue card, attention, and article reader comp
 });
 
 test('moving homepage sections preserves visibility and does not mutate the original',()=>{
-  const initial=defaultHomeSettings();initial.sections[1].visible=false;
-  const moved=moveSection(initial,'shortcuts',-1);
+  const initial=defaultHomeSettings();initial.sections.find(section=>section.id==='shortcuts').visible=false;
+  const moved=moveSection(moveSection(initial,'shortcuts',-1),'shortcuts',-1);
   assert.equal(moved.sections[0].id,'shortcuts');assert.equal(moved.sections[0].visible,false);
   assert.equal(initial.sections[0].id,'attention');
   assert.deepEqual(moveSection(initial,'attention',-1),initial);

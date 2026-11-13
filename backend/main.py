@@ -27,6 +27,7 @@ from pdf_progress import PROGRESS_COLUMNS, PROGRESS_NAMES, initialize_pdf_progre
 
 from article_progress import HTML_PROGRESS_COLUMNS, HTML_PROGRESS_NAMES, initialize_article_progress, progress_for as html_progress_for, router as article_progress_router
 from home import initialize_home, router as home_router
+from weather import WeatherGateway, router as weather_router
 
 import re
 
@@ -244,7 +245,11 @@ async def lifespan(app: FastAPI):
     ) as availability_client, httpx.AsyncClient(
         timeout=httpx.Timeout(8.0, connect=3.0), follow_redirects=False, trust_env=False,
         headers={"User-Agent": "Clonepage/0.4 (personal HN reader)"},
-    ) as hn_client:
+    ) as hn_client, httpx.AsyncClient(
+        timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False, trust_env=False,
+        headers={"User-Agent": "Clonepage/0.4 (personal weather dashboard)", "Accept": "application/json"},
+    ) as weather_client:
+        app.state.weather = WeatherGateway(weather_client)
         app.state.hacker_news = HackerNewsGateway(hn_client)
         app.state.nas_temps = NasTempsGateway(client)
         app.state.wud = WudGateway(wud_client, os.getenv("WUD_URL", "http://10.0.0.149:3000"),
@@ -286,6 +291,7 @@ app.include_router(uploads_router)
 app.include_router(progress_router)
 app.include_router(article_progress_router)
 app.include_router(home_router)
+app.include_router(weather_router)
 app.include_router(availability_router)
 app.include_router(shortcuts_router)
 app.include_router(dsm_router)

@@ -1,6 +1,6 @@
 # Homepage and reading continuity
 
-Use **Customize homepage** (the sliders beside the theme button) to reorder or hide Needs attention, Your places, Continue reading, Reading list, Feeds, and Hacker News. Choose 3, 5, or 10 preview items and the Hacker News view and time window. You can hide the clock and greeting while keeping search available. Save layout applies these preferences to all devices through the NAS database. Restore defaults prepares the original layout; Save layout commits it.
+Use **Customize homepage** (the sliders beside the theme button) to reorder or hide Needs attention, Weather, Your places, Continue reading, Reading list, Feeds, and Hacker News. Choose 3, 5, or 10 preview items and the Hacker News view and time window. You can hide the clock and greeting while keeping search available. Save layout applies these preferences to all devices through the NAS database. Restore defaults prepares the original layout; Save layout commits it.
 
 Changes made in another session cannot be silently overwritten. Reload the latest layout if a conflict appears. Attention links can temporarily reveal a hidden section without changing your preferences.
 
@@ -30,3 +30,7 @@ Rebuild API, worker, and web together using the existing deployment process. Sta
 - GET /api/reading/{id}/article-progress returns copy_version, revision, and position. POST accepts {copy_version, revision, position}; position contains fraction, anchor, and offset, or null to reset. A stale copy or revision returns 409.
 
 Run npm test, npm run check, npm run build, and python -B -m unittest discover -s backend/tests -q. Deployment shell tests require Linux/WSL.
+
+## Weather
+
+The weather card defaults to US ZIP 22206 and Fahrenheit. Location, units, section visibility, and order are configurable in Customize homepage. Existing layouts migrate automatically while preserving other choices. See [weather.md](weather.md) for caching, forecast semantics, and deployment details.
