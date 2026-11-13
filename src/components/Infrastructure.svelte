@@ -190,11 +190,7 @@
 
 <section class="infrastructure">
   <header class="infra-heading">
-    <div>
-      <div class="infra-eyebrow"><featureIcons.infrastructure size={iconSizes.section}/>YOUR INFRASTRUCTURE</div>
-      <h1>Your NAS, at a glance.</h1>
-      <p>CPU, memory, and drive health, with a little history.</p>
-    </div>
+    <div class="page-title"><featureIcons.infrastructure size={iconSizes.page}/><h1>Infrastructure</h1></div>
     <div class="collection-actions">
       <span class="connection" class:delayed={connectionLabel !== 'Collector running' || diagnostics.length > 0}><i></i>{connectionLabel}</span>
       <div class="readout-controls">
@@ -271,7 +267,7 @@
 
     <section class="history-section" aria-label="Metric history">
       <div class="history-heading">
-        <div class="infra-section-heading"><h2>A LITTLE PERSPECTIVE</h2><span>{historyLoading ? 'UPDATING HISTORY' : 'METRIC HISTORY'}</span></div>
+        <div class="infra-section-heading"><h2>HISTORY</h2><span>{historyLoading ? 'UPDATING HISTORY' : 'METRIC HISTORY'}</span></div>
         <div class="range-options" role="group" aria-label="History time range">
           {#each ranges as option}<button class:active={range === option.seconds} aria-pressed={range === option.seconds} title={option.label} onclick={() => range = option.seconds}>{option.short}</button>{/each}
         </div>
@@ -298,11 +294,10 @@
 </section>
 
 <style>
-  .infrastructure { max-width: 1060px; margin: 66px auto 0; padding-bottom: 10px; }
-  .infra-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 33px; }
-  .infra-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 9px; letter-spacing: 2.4px; font-weight: 700; color: var(--highlight); }
-  h1 { margin: 17px 0 10px; font-size: 36px; }
-  .infra-heading p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .infrastructure { max-width: 1060px; margin:0 auto; padding-bottom: 10px; }
+  .infra-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom:24px; }
+  .page-title { display:flex; align-items:center; gap:12px; color:var(--highlight); }
+  h1 { margin:0; color:var(--text); font-family:inherit; font-size:24px; font-weight:500; font-style:normal; letter-spacing:-.4px; }
   .collection-actions { display: flex; align-items: center; gap: 16px; padding-bottom: 3px; }
   .readout-controls { display: flex; align-items: center; gap: 10px; }
   .unit-options { display: flex; padding: 4px; gap: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
@@ -367,8 +362,8 @@
   :global(.refreshing) { animation: spin 1.5s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (max-width: 1000px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .resource-history { grid-template-columns: 1fr; } }
-  @media (max-width: 850px) { .infra-heading { align-items: flex-start; flex-direction: column; gap: 22px; } .collection-actions { width: 100%; justify-content: space-between; } .summary-card { padding: 22px 18px; } .card-label { gap: 7px; } .card-label span { font-size: 8px; letter-spacing: 1px; } .summary-value { font-size: 36px; } }
+  @media (max-width: 850px) { .infra-heading { align-items: flex-start; flex-direction: column; gap: 16px; } .collection-actions { width: 100%; justify-content: space-between; } .summary-card { padding: 22px 18px; } .card-label { gap: 7px; } .card-label span { font-size: 8px; letter-spacing: 1px; } .summary-value { font-size: 36px; } }
   @media (max-width: 650px) { .history-heading { flex-direction: column; align-items: stretch; gap: 12px; } .range-options { width: 100%; } .range-options button { flex: 1; min-width: 0; } .summary-grid { grid-template-columns: 1fr; gap: 12px; } .drive-grid { grid-template-columns: 1fr; } .summary-card { display: grid; grid-template-columns: 1fr auto; column-gap: 12px; padding: 20px; } .card-label { grid-column: 1; } .summary-value { grid-column: 2; grid-row: 1 / 4; margin: 0; align-self: center; font-size: 35px; } .metric-context { grid-column: 1; margin: 10px 0 7px; } .usage-meter { grid-column: 1; margin: 15px 0 10px; max-width: 160px; } .reading-age { grid-column: 1; } .ram-details { grid-column: 1 / -1; margin-top: 10px; } .ram-card .reading-age { grid-row: 4; } .drive-summary .summary-value small { display: block; text-align: right; margin: 6px 0 0; font-size: 10px; } }
-  @media (max-width: 540px) { .infrastructure { margin-top: 42px; } h1 { font-size: 30px; } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } }
+  @media (max-width: 540px) { h1 { font-size:22px; } .history-heading { gap: 8px; } .infra-section-heading h2 { font-size: 8px; letter-spacing: 1.1px; } .range-options button { padding: 6px 9px; } .infra-footnote { align-items: flex-start; } }
   @media (max-width: 540px) { .collection-actions { flex-direction: column; align-items: flex-start; gap: 14px; } .readout-controls { width: 100%; justify-content: space-between; } }
 </style>

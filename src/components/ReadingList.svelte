@@ -577,7 +577,7 @@
             {:else}
                 <featureIcons.reading size={iconSizes.empty} />
                 <p>{search ? 'No matching articles.' : 'Your queue is empty.'}</p>
-                <small>Save something interesting for later.</small>
+                <small>Add an article or upload a PDF.</small>
             {/if}
         </div>
     {:else}

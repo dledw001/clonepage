@@ -21,7 +21,6 @@
   const stories = $derived((readerState.data?.stories ?? []).filter(story => !hideRead || !story.is_read));
   const visible = $derived(stories.slice(0, preview ? previewCount : shown));
   const notice = $derived(readerState.error || readerState.data?.error || readerState.data?.notice || '');
-  const heading = $derived(readerState.scope.view === 'front' ? 'The front page, at your pace.' : readerState.scope.view === 'top' ? 'Stories worth catching up on.' : 'Conversations worth a look.');
 
   $effect(() => { const current = active; if (mounted && current) untrack(() => { void reader.refresh(); }); });
 
@@ -60,7 +59,7 @@
     </SectionHeader>
   {:else}
     <header>
-      <div class="heading"><span class="page-symbol" aria-hidden="true"><featureIcons.hackerNews size={iconSizes.page}/></span><div><div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1></div></div>
+      <div class="heading"><span class="page-symbol" aria-hidden="true"><featureIcons.hackerNews size={iconSizes.page}/></span><h1>Hacker News</h1></div>
       <div class="header-actions"><button class="icon-button" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={iconSizes.action} class={readerState.loading ? 'spinning' : ''}/></button></div>
     </header>
   {/if}
@@ -87,9 +86,9 @@
   {#if notice}<p class="notice" role="status">{notice}</p>{/if}
   {#if readerState.notice}<p class="status" role="status">{readerState.notice}</p>{/if}
   {#if !readerState.data}
-    <div class="empty"><featureIcons.hackerNews size={iconSizes.empty} /><p>{readerState.loading ? 'Finding stories worth your time…' : 'Hacker News could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh(true)}>Try again</button>{/if}</div>
+    <div class="empty"><featureIcons.hackerNews size={iconSizes.empty} /><p>{readerState.loading ? 'Loading stories…' : 'Hacker News could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh(true)}>Try again</button>{/if}</div>
   {:else if !stories.length}
-    <div class="empty"><CircleCheck size={iconSizes.empty} /><p>{hideRead ? 'You’re caught up on this list.' : 'No stories found in this view.'}</p>{#if hideRead}<button onclick={() => hideRead = false}>Show read stories</button>{/if}</div>
+    <div class="empty"><CircleCheck size={iconSizes.empty} /><p>{hideRead ? 'No unread stories in this view.' : 'No stories found in this view.'}</p>{#if hideRead}<button onclick={() => hideRead = false}>Show read stories</button>{/if}</div>
   {:else}
     <div class="story-list" aria-busy={readerState.loading}>
       {#each visible as story, index (story.id)}
@@ -112,15 +111,13 @@
 
 <style>
   .hn-reader { margin: 48px 0 0; padding: 30px 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
-  .hn-reader:not(.preview) { margin-top: 50px; }
+  .hn-reader:not(.preview) { max-width:1060px; margin:0 auto; }
   .hn-reader.preview { margin:0; padding:var(--section-padding); border-radius:var(--panel-radius); }
   header, .heading, .header-actions, .toolbar, .tabs, .windows, .meta, .list-footer { display: flex; align-items: center; }
   header { justify-content: space-between; gap: 16px; }
   .heading { gap: 13px; min-width: 0; }
   .page-symbol { display:grid; place-items:center; flex-shrink:0; width:31px; height:31px; color:var(--highlight); }
-  .eyebrow { margin: 0; font-size: 11px; letter-spacing: .15em; font-weight: 600; }
-  .eyebrow { color: var(--muted); font-size: 10px; }
-  h1 { margin: 7px 0 0; font-size: 23px; font-weight: 500; line-height: 1.4; }
+  h1 { margin:0; font-weight:500; font-size:24px; line-height:1.4; font-family:inherit; font-style:normal; letter-spacing:-.4px; }
   .header-actions { gap: 14px; flex-shrink: 0; }
   button { border: 0; background: transparent; color: var(--muted); }
   a { color: var(--highlight); text-decoration: none; }
@@ -128,7 +125,7 @@
   .icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 32px; padding: 4px; border-radius: 7px; }
   .icon-button:hover { background: var(--surface-hover); color: var(--text); }
   .list-footer a { display: flex; align-items: center; gap: 7px; font-size: 11px; }
-  .toolbar { gap: 14px; flex-wrap: wrap; margin-top: 28px; }
+  .toolbar { gap: 14px; flex-wrap: wrap; margin-top: 22px; }
   .tabs, .windows { gap: 3px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   .tabs button, .windows button { padding: 9px 12px; border-radius: 6px; font-size: 11px; }
   button.active { background: var(--surface); color: var(--text); }
@@ -160,6 +157,6 @@
   .empty { padding: 38px 12px; text-align: center; color: var(--muted); font-size: 13px; }
   button:disabled { cursor: default; opacity: .55; }
   :is(a, button, input):focus-visible { outline: 2px solid var(--highlight); outline-offset: 4px; }
-  @media (max-width: 650px) { .hn-reader { padding: 22px 18px; } h1 { font-size: 19px; } .header-actions { gap: 6px; } .toolbar { gap: 10px; } .tabs { width: 100%; justify-content: space-between; } .tabs button { padding: 9px; flex: 1; } article { gap: 8px; } .story-title a { font-size: 13px; } .save { padding: 8px; } .save span { display: none; } .hide-read { margin-left: auto; } }
+  @media (max-width: 650px) { .hn-reader { padding: 22px 18px; } h1 { font-size:22px; } .header-actions { gap: 6px; } .toolbar { gap: 10px; } .tabs { width: 100%; justify-content: space-between; } .tabs button { padding: 9px; flex: 1; } article { gap: 8px; } .story-title a { font-size: 13px; } .save { padding: 8px; } .save span { display: none; } .hide-read { margin-left: auto; } }
   @media (hover: none) and (pointer: coarse) { .icon-button, .save, .tabs button, .windows button { min-width: 44px; min-height: 44px; } .hide-read { min-height: 44px; } }
 </style>

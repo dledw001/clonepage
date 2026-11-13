@@ -1,6 +1,6 @@
 # Homepage and reading continuity
 
-Use **Customize homepage** (the sliders beside the theme button) to reorder or hide Needs attention, Weather, Your places, Continue reading, Reading list, Feeds, and Hacker News. Choose 3, 5, or 10 preview items and the Hacker News view and time window. You can hide the clock and greeting while keeping search available. Save layout applies these preferences to all devices through the NAS database. Restore defaults prepares the original layout; Save layout commits it.
+Use **Customize homepage** (the sliders beside the theme button) to reorder or hide Needs attention, Weather, Your places, Continue reading, Reading list, Feeds, and Hacker News. Choose 3, 5, or 10 preview items and the Hacker News view and time window. The clock is in the top bar and can be hidden without affecting search. Search is available on every page from the header or Ctrl/Cmd K. Save layout applies these preferences to all devices through the NAS database. Restore defaults prepares the original layout; Save layout commits it.
 
 Changes made in another session cannot be silently overwritten. Reload the latest layout if a conflict appears. Attention links can temporarily reveal a hidden section without changing your preferences.
 
@@ -34,3 +34,7 @@ Run npm test, npm run check, npm run build, and python -B -m unittest discover -
 ## Weather
 
 The weather card defaults to US ZIP 22206 and Fahrenheit. Location, units, section visibility, and order are configurable in Customize homepage. Existing layouts migrate automatically while preserving other choices. See [weather.md](weather.md) for caching, forecast semantics, and deployment details.
+
+## Compact header and search
+
+Homepage content starts directly below the shared header. The header contains a compact clock/date, navigation, search, and appearance controls. The clock uses local device time, shows minutes without seconds, and retains the existing show_clock preference. Search opens a modal command palette without changing the current page or reading position. See [compact-layout.md](compact-layout.md) for keyboard behavior and rollback details.

@@ -141,9 +141,9 @@
   {#if !readerState.data}
     <div class="empty"><featureIcons.feeds size={iconSizes.empty} /><p>{readerState.loading ? 'Loading your feeds...' : 'Feeds could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh()}>Try again</button>{/if}</div>
   {:else if !subscriptions.length}
-    <div class="empty"><featureIcons.feeds size={iconSizes.empty} /><p>Your sources, in one place.</p><small>Add a website or feed URL to start collecting stories.</small></div>
+    <div class="empty"><featureIcons.feeds size={iconSizes.empty} /><p>No feeds added.</p><small>Add a website or feed URL to start collecting stories.</small></div>
   {:else if !entries.length}
-    <div class="empty"><CircleCheck size={iconSizes.empty} /><p>{search.trim() ? 'No matching stories.' : view === 'unread' ? 'You’re caught up.' : 'No stories collected yet.'}</p><small>{view === 'unread' && !search.trim() ? 'Switch to All to browse stories you’ve read.' : 'New entries appear here after feeds update.'}</small></div>
+    <div class="empty"><CircleCheck size={iconSizes.empty} /><p>{search.trim() ? 'No matching stories.' : view === 'unread' ? 'No unread stories.' : 'No stories collected yet.'}</p><small>{view === 'unread' && !search.trim() ? 'Switch to All to browse stories you’ve read.' : 'New entries appear here after feeds update.'}</small></div>
   {:else}
     <div class="entry-list" aria-busy={readerState.loading}>
       {#each visible as entry (entry.id)}

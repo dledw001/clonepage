@@ -218,7 +218,7 @@
   .article-progress button:disabled{opacity:.5;cursor:default}.progress-notice{margin:12px 0;color:var(--warning);font-size:12px;line-height:1.7}.progress-notice button{margin-right:8px}
   @media (hover:none) and (pointer:coarse){.article-progress button,.progress-notice button{min-height:44px}}
 
-  .saved-article { max-width: 1060px; margin: 50px auto 0; }
+  .saved-article { max-width: 1060px; margin:0 auto; }
   .back { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; text-decoration: none; }
   header { margin: 30px 0 24px; }
   .eyebrow { font-size: 9px; letter-spacing: 2px; color: var(--highlight); }
@@ -233,5 +233,5 @@
   .notice button { background: transparent; border: 0; color: var(--highlight); cursor: pointer; font: inherit; margin-left: 12px; }
   iframe { width: 100%; display: block; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
   .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: 13px; }
-  @media (max-width:540px) { .saved-article { margin-top: 32px; } h1 { font-size: 27px; } }
+  @media (max-width:540px) { h1 { font-size: 27px; } }
 </style>

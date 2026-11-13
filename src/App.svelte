@@ -3,8 +3,9 @@
   import { onMount, tick } from 'svelte';
   import { setLucideProps } from '@lucide/svelte/context';
 
-  import { ArrowRight, Command, Moon, Search, Sun, Settings2 } from '@lucide/svelte';
+  import { Command, Moon, Search, Sun, Settings2 } from '@lucide/svelte';
 
+  import CommandPalette from './components/CommandPalette.svelte';
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
   import HackerNews from './components/HackerNews.svelte';
@@ -15,18 +16,15 @@
   import { HomeLayoutStore, defaultHomeSettings, homeSectionFromSearch, type LayoutState } from './lib/home';
   import Infrastructure from './components/Infrastructure.svelte';
   import SavedArticle from './components/SavedArticle.svelte';
-  import { PageNavigation, isPlainClick, webSearchUrl } from './lib/navigation';
+  import { PageNavigation, isPlainClick } from './lib/navigation';
 
   import Shortcuts from './components/Shortcuts.svelte';
-  import { shortcutIcon } from './lib/shortcut-icons';
   import { ShortcutStore, type Shortcut, type ShortcutState } from './lib/shortcuts';
 
   setLucideProps(lucideDefaults);
 
   let shortcutState = $state<ShortcutState>({ items: [], revision: 0, loaded: false, loading: false, busy: false, conflict: false, error: '' });
   const shortcutStore = new ShortcutStore(next => shortcutState = next);
-  const commands = $derived(shortcutState.items.map(item => ({ ...item, icon: shortcutIcon(item.icon) })));
-  type CommandItem = (typeof commands)[number];
 
   let layoutState=$state<LayoutState>({settings:defaultHomeSettings(),revision:0,loaded:false,loading:false,busy:false,conflict:false,error:''});
   const layoutStore=new HomeLayoutStore(next=>layoutState=next);
@@ -34,9 +32,7 @@
   let homeFocus=$state(typeof window==='undefined'?null:homeSectionFromSearch(window.location.search));
 
   let now = $state(new Date());
-  let query = $state('');
   let paletteOpen = $state(false);
-  let selected = $state(0);
   let theme = $state<'dark' | 'light'>('dark');
   let toast = $state('');
 
@@ -62,47 +58,15 @@
 
   function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; monitorFocus = new URLSearchParams(window.location.search).get('monitor'); homeFocus=homeSectionFromSearch(window.location.search); }
 
-  let searchInput = $state<HTMLInputElement>();
-  let searchRegion = $state<HTMLDivElement>();
+  let searchPalette = $state<{focusSearch:()=>void}>();
 
-  const matches = $derived(
-    query.trim()
-      ? commands.filter(c => {
-          const text = query.toLowerCase().trim();
-          return c.name.toLowerCase().includes(text) ||
-            c.aliases.some(alias => alias.includes(text));
-        })
-      : commands
-  );
-
-  const time = $derived(
-    now.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23'
-    })
-  );
-
-  const date = $derived(
-    now.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  );
-
-  const greeting = $derived(
-    now.getHours() < 12 ? 'A fresh start to the day.' :
-    now.getHours() < 17 ? 'A moment to refocus.' :
-    'Make yourself at home.'
-  );
+  const time = $derived(now.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true}));
+  const date = $derived(now.toLocaleDateString('en-US', {weekday:'short',month:'short',day:'numeric'}));
 
   onMount(() => {
     void shortcutStore.refresh();
     void layoutStore.refresh().then(async()=>{await tick();scrollHomeSection();});
-    const refreshShortcuts = () => { if (!document.hidden) { void shortcutStore.refresh(); if(!customizingHome)void layoutStore.refresh(); } };
+    const refreshShortcuts = () => { if (!document.hidden) { now=new Date(); void shortcutStore.refresh(); if(!customizingHome)void layoutStore.refresh(); } };
     document.addEventListener('visibilitychange', refreshShortcuts);
     window.addEventListener('focus', refreshShortcuts);
     const saved = localStorage.getItem('clonepage-theme');
@@ -111,7 +75,8 @@
     }
 
     const interval = setInterval(() => {
-      now = new Date();
+      const next = new Date();
+      if (Math.floor(next.getTime()/60000)!==Math.floor(now.getTime()/60000)) now=next;
     }, 1000);
 
     const stopNavigation = navigation?.start();
@@ -139,7 +104,11 @@
     navigation?.backToList();
   }
 
-  function closePalette() { paletteOpen = false; query = ''; }
+  async function openSearch() {
+    paletteOpen=true;
+    await tick();
+    searchPalette?.focusSearch();
+  }
 
   function toggleTheme() {
     theme = theme === 'dark' ? 'light' : 'dark';
@@ -155,7 +124,6 @@
 
   async function execute(command: Pick<Shortcut, 'action' | 'value' | 'name'>) {
     paletteOpen = false;
-    query = '';
 
     if (command.action === 'copy') {
       try {
@@ -175,70 +143,29 @@
     window.open(command.value, '_blank', 'noopener,noreferrer');
   }
 
-  function searchWeb() {
-    const text = query.trim();
-    if (!text) return;
-
-    window.location.assign(webSearchUrl(text));
-    paletteOpen = false;
-    query = '';
-  }
-
-  function handleSearchKeydown(event: KeyboardEvent) {
-    if (event.key === 'ArrowDown') {
+  function handleGlobalKeydown(event: KeyboardEvent) {
+    if (!event.defaultPrevented && !event.isComposing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase()==='k') {
       event.preventDefault();
-      selected = Math.min(selected + 1, matches.length - 1);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      selected = Math.max(selected - 1, 0);
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-
-      if (matches.length) {
-        execute(matches[Math.max(0, Math.min(selected, matches.length - 1))]);
-      } else {
-        searchWeb();
-      }
-    }
-  }
-
-  async function handleGlobalKeydown(event: KeyboardEvent) {
-    if ((event.ctrlKey || event.metaKey) &&
-        event.key.toLowerCase() === 'k') {
-      event.preventDefault();
-      if (page !== 'home') {
-        await navigation?.go('/');
-      }
-      searchInput?.focus();
-      paletteOpen = true;
-    }
-
-    if (event.key === 'Escape') {
-      paletteOpen = false;
-      searchInput?.blur();
-    }
-  }
-
-  function handleOutsideClick(event: PointerEvent) {
-    if (searchRegion &&
-        !searchRegion.contains(event.target as Node)) {
-      paletteOpen = false;
+      void openSearch();
     }
   }
 </script>
 
 <svelte:window
   onkeydown={handleGlobalKeydown}
-  onpointerdown={handleOutsideClick}
 />
 
 <div class="app" class:light={theme === 'light'}>
   <div class="page">
-    <header class="topbar">
-      <a href="/" class="brand" onclick={event => navigate(event, '/')}>
+    <header class="topbar" class:without-clock={!layoutState.settings.show_clock}>
+      <a href="/" class="brand" aria-label="Clonepage home" onclick={event => navigate(event, '/')}>
         <span class="brand-mark">✳</span>
-        <span>clonepage<span class="brand-dot">.</span></span>
+        <span class="brand-label">clonepage<span class="brand-dot">.</span></span>
       </a>
+
+      {#if layoutState.settings.show_clock}
+        <time class="header-clock" datetime={now.toISOString()} title={now.toLocaleString()} aria-label={`${time}, ${date}`}><span>{time}</span><small>{date}</small></time>
+      {/if}
 
       <nav class="page-navigation" aria-label="Main navigation">
         <a href="/" class:current={page === 'home'} aria-current={page === 'home' ? 'page' : undefined} onclick={event => navigate(event, '/')}><featureIcons.home size={iconSizes.navigation} />Home</a>
@@ -247,6 +174,7 @@
       </nav>
 
       <div class="top-actions">
+        <button class="header-search" aria-label="Search shortcuts or the web" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls={paletteOpen?'command-search':undefined} onclick={openSearch}><Search size={iconSizes.action}/><span>Search</span><kbd>Ctrl K</kbd></button>
         {#if page==='home'}<button class="icon-button" aria-label="Customize homepage" title="Customize homepage" aria-expanded={customizingHome} onclick={()=>customizingHome=!customizingHome}><Settings2 size={iconSizes.action}/></button>{/if}
         <button
           class="icon-button"
@@ -272,84 +200,7 @@
       {/if}
       {#if homeVisited}
       <div hidden={page !== 'home'}>
-      <section class="hero" class:compact={!layoutState.settings.show_clock}>
-        {#if layoutState.settings.show_clock}
-        <div class="eyebrow">
-          <span class="eyebrow-line"></span>
-          A LITTLE ROOM TO THINK
-          <span class="eyebrow-line"></span>
-        </div>
-
-        <div class="clock" style="font-family: monospace">{time}</div>
-        <div class="date">{date}</div>
-
-        <h1>{greeting}</h1>
-
-        {/if}
-        <div class="search-region" bind:this={searchRegion}>
-          <div class="search-box" class:active={paletteOpen}>
-            <Search size={iconSizes.search} />
-
-            <input
-              bind:this={searchInput}
-              bind:value={query}
-              onfocus={() => paletteOpen = true}
-              oninput={() => selected = 0}
-              onkeydown={handleSearchKeydown}
-              placeholder="Search anything, or enter a command..."
-              aria-label="Search or command"
-              autocomplete="off"
-              spellcheck="false"
-            />
-
-            <kbd>Ctrl K</kbd>
-          </div>
-
-          {#if paletteOpen}
-            <div class="command-results">
-              <div class="results-heading">
-                {query.trim() ? 'MATCHING COMMANDS' : 'QUICK ACTIONS'}
-              </div>
-
-              {#snippet resultContent(command: CommandItem)}
-                <span class="result-icon"><command.icon size={iconSizes.shortcut} /></span>
-                <span class="result-text"><strong>{command.name}</strong><small>{command.description}</small></span>
-                <ArrowRight size={iconSizes.action} />
-              {/snippet}
-              {#if !shortcutState.loaded}<p class="command-status">{shortcutState.loading ? 'Loading shortcuts...' : 'Shortcuts could not be loaded.'}</p>{:else if !commands.length}<p class="command-status">Add your first shortcut in Your Places.</p>{/if}
-              {#each matches as command, index (command.id)}
-                {#if command.action === 'open' && command.value}
-                  <a class="result" class:selected={selected === index} href={command.value} target="_blank" rel="noopener noreferrer"
-                    onmouseenter={() => selected = index} onclick={closePalette}>{@render resultContent(command)}</a>
-                {:else}
-                <button
-                  class="result"
-                  class:selected={selected === index}
-                  onmouseenter={() => selected = index}
-                  onclick={() => execute(command)}
-                >
-                  {@render resultContent(command)}
-                </button>
-                {/if}
-              {/each}
-
-              {#if query.trim()}
-                <a class="web-result" href={webSearchUrl(query)}>
-                  <Search size={iconSizes.action} />
-                  <span>Search the web for "{query}"</span>
-                  <ArrowRight size={iconSizes.action} />
-                </a>
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <p class="search-hint">
-          Try <code>nas</code>, <code>vault</code>,
-          or <code>ssh arch</code>
-        </p>
-      </section>
-
+      <h1 class="sr-only">Home</h1>
       {#if customizingHome}<HomeCustomize data={layoutState} store={layoutStore} onclose={()=>customizingHome=false}/>{/if}
       {#if layoutState.error&&!customizingHome}<p class="home-layout-error" role="status">{layoutState.error} Your last available homepage layout is kept. <button onclick={()=>layoutStore.refresh(true)}>Try again</button></p>{/if}
       <div class="home-sections">
@@ -371,12 +222,9 @@
       {/if}
     </main>
 
-    <footer>
-      <span>Designed for a quieter internet.</span>
-      <span>CLONEPAGE · V0.1</span>
-    </footer>
   </div>
 
+  {#if paletteOpen}<CommandPalette bind:this={searchPalette} commands={shortcutState.items} loaded={shortcutState.loaded} loading={shortcutState.loading} onexecute={execute} onclose={()=>paletteOpen=false}/>{/if}
   {#if toast}
     <div class="toast">
       <Command size={iconSizes.action} />
