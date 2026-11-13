@@ -241,7 +241,6 @@
       </nav>
 
       <div class="top-actions">
-        <span class="top-caption">YOUR PERSONAL SPACE</span>
         {#if page==='home'}<button class="icon-button" aria-label="Customize homepage" title="Customize homepage" aria-expanded={customizingHome} onclick={()=>customizingHome=!customizingHome}><Settings2 size={18}/></button>{/if}
         <button
           class="icon-button"
@@ -347,6 +346,7 @@
 
       {#if customizingHome}<HomeCustomize data={layoutState} store={layoutStore} onclose={()=>customizingHome=false}/>{/if}
       {#if layoutState.error&&!customizingHome}<p class="home-layout-error" role="status">{layoutState.error} Your last available homepage layout is kept. <button onclick={()=>layoutStore.refresh(true)}>Try again</button></p>{/if}
+      <div class="home-sections">
       {#each layoutState.settings.sections as section(section.id)}
         {#if section.visible||homeFocus===section.id}
           <div id={`home-${section.id}`} class="home-section">
@@ -359,6 +359,7 @@
           </div>
         {/if}
       {/each}
+      </div>
       </div>
       {/if}
     </main>

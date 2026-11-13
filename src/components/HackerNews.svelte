@@ -1,6 +1,7 @@
 <script lang="ts">
+  import SectionHeader from './SectionHeader.svelte';
   import { onMount, untrack } from 'svelte';
-  import { ArrowRight, ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, MessageSquare, RefreshCw } from '@lucide/svelte';
+  import { ArrowRight, ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, MessageSquare, Newspaper, RefreshCw } from '@lucide/svelte';
   import { HackerNewsReader, storyAge, storyDomain, type HNState, type HNScope } from '../lib/hacker-news';
 
   let { preview = false, active = true, previewCount = 3, previewScope = {view:'top',window:'24h'}, onnavigate }: {
@@ -47,14 +48,21 @@
   function scope(changes: Partial<HNScope>) { shown = 25; reader.setScope(changes); }
 </script>
 
-<section class="hn-reader" class:preview aria-label="Hacker News">
-  <header>
-    <div class="heading"><span class="hn-mark" aria-hidden="true">Y</span><div>{#if preview}<h2>HACKER NEWS</h2><small>{readerState.scope.view==='front'?'Front page':readerState.scope.view==='top'?'Top stories':'Most discussed'}{readerState.scope.view!=='front'?` · past ${readerState.scope.window==='24h'?'24 hours':readerState.scope.window==='7d'?'7 days':'30 days'}`:''}</small>{:else}<div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1>{/if}</div></div>
-    <div class="header-actions">
-      <button class="icon-button" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={17} class={readerState.loading ? 'spinning' : ''} /></button>
-      {#if preview}<a class="open-reader" href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Open reader <ArrowRight size={15} /></a>{/if}
-    </div>
-  </header>
+<section class="hn-reader" class:home-surface={preview} class:preview aria-label="Hacker News">
+  {#if preview}
+    <SectionHeader title="Hacker News" subtitle={`${readerState.scope.view==='front'?'Front page':readerState.scope.view==='top'?'Top stories':'Most discussed'}${readerState.scope.view!=='front'?` · past ${readerState.scope.window==='24h'?'24 hours':readerState.scope.window==='7d'?'7 days':'30 days'}`:''}`}>
+      {#snippet icon()}<Newspaper size={19} strokeWidth={1.7}/>{/snippet}
+      {#snippet actions()}
+        <button class="section-icon-action" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={17} class={readerState.loading ? 'spinning' : ''}/></button>
+        <a class="section-action" href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Open reader<ArrowRight size={15}/></a>
+      {/snippet}
+    </SectionHeader>
+  {:else}
+    <header>
+      <div class="heading"><span class="hn-mark" aria-hidden="true">Y</span><div><div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1></div></div>
+      <div class="header-actions"><button class="icon-button" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={17} class={readerState.loading ? 'spinning' : ''}/></button></div>
+    </header>
+  {/if}
 
   {#if !preview}
     <div class="toolbar">
@@ -104,21 +112,21 @@
 <style>
   .hn-reader { margin: 48px 0 0; padding: 30px 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
   .hn-reader:not(.preview) { margin-top: 50px; }
+  .hn-reader.preview { margin:0; padding:var(--section-padding); border-radius:var(--panel-radius); }
   header, .heading, .header-actions, .toolbar, .tabs, .windows, .meta, .list-footer { display: flex; align-items: center; }
   header { justify-content: space-between; gap: 16px; }
   .heading { gap: 13px; min-width: 0; }
   .hn-mark { display: grid; place-items: center; flex-shrink: 0; width: 31px; height: 31px; border: 1px solid var(--warning); border-radius: 8px; color: var(--warning); font: 600 20px monospace; }
-  h2, .eyebrow { margin: 0; font-size: 11px; letter-spacing: .15em; font-weight: 600; }
+  .eyebrow { margin: 0; font-size: 11px; letter-spacing: .15em; font-weight: 600; }
   .eyebrow { color: var(--muted); font-size: 10px; }
   h1 { margin: 7px 0 0; font-size: 23px; font-weight: 500; line-height: 1.4; }
-  .heading small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
   .header-actions { gap: 14px; flex-shrink: 0; }
   button { border: 0; background: transparent; color: var(--muted); }
   a { color: var(--highlight); text-decoration: none; }
   a:hover { text-decoration: underline; }
   .icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 32px; padding: 4px; border-radius: 7px; }
   .icon-button:hover { background: var(--surface-hover); color: var(--text); }
-  .open-reader, .list-footer a { display: flex; align-items: center; gap: 7px; font-size: 11px; }
+  .list-footer a { display: flex; align-items: center; gap: 7px; font-size: 11px; }
   .toolbar { gap: 14px; flex-wrap: wrap; margin-top: 28px; }
   .tabs, .windows { gap: 3px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
   .tabs button, .windows button { padding: 9px 12px; border-radius: 6px; font-size: 11px; }
@@ -151,6 +159,6 @@
   .empty { padding: 38px 12px; text-align: center; color: var(--muted); font-size: 13px; }
   button:disabled { cursor: default; opacity: .55; }
   :is(a, button, input):focus-visible { outline: 2px solid var(--highlight); outline-offset: 4px; }
-  @media (max-width: 650px) { .hn-reader { padding: 22px 18px; } h1 { font-size: 19px; } .header-actions { gap: 6px; } .open-reader { font-size: 10px; } .toolbar { gap: 10px; } .tabs { width: 100%; justify-content: space-between; } .tabs button { padding: 9px; flex: 1; } article { gap: 8px; } .story-title a { font-size: 13px; } .save { padding: 8px; } .save span { display: none; } .hide-read { margin-left: auto; } }
+  @media (max-width: 650px) { .hn-reader { padding: 22px 18px; } h1 { font-size: 19px; } .header-actions { gap: 6px; } .toolbar { gap: 10px; } .tabs { width: 100%; justify-content: space-between; } .tabs button { padding: 9px; flex: 1; } article { gap: 8px; } .story-title a { font-size: 13px; } .save { padding: 8px; } .save span { display: none; } .hide-read { margin-left: auto; } }
   @media (hover: none) and (pointer: coarse) { .icon-button, .save, .tabs button, .windows button { min-width: 44px; min-height: 44px; } .hide-read { min-height: 44px; } }
 </style>

@@ -1,12 +1,14 @@
 
 <script lang="ts">
     import { onMount } from 'svelte';
+    import SectionHeader from './SectionHeader.svelte';
+    import OverflowMenu from './OverflowMenu.svelte';
     import DocumentUpload from './DocumentUpload.svelte';
     import {
         Archive, ArchiveRestore, ArrowUpRight,
         BookOpen, Check, Circle, CircleCheck,
         Pencil, Plus, RefreshCw, Search,
-        Trash2, Upload, X
+        Trash2, Upload, Download, X
     } from '@lucide/svelte';
 
     let { active = true, previewCount = 3, onnavigate }: { active?: boolean; previewCount?: number; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
@@ -488,37 +490,15 @@
     }
 </script>
 
-<section class="reading">
-    <header class="reading-header">
-        <div class="heading">
-            <BookOpen size={19} strokeWidth={1.7} />
-            <span>READING LIST</span>
-            <span class="count">{unread} UNREAD</span>
-        </div>
-
-        <div class="actions">
-            <button
-                    class="icon-action"
-                    onclick={() => refresh()}
-                    aria-label="Refresh"
-                    title="Refresh reading list"
-            >
-                <RefreshCw size={17} />
-            </button>
-
-            <button class="add-button upload-button" disabled={saving} aria-expanded={uploading}
-                    onclick={() => { uploading = !uploading; adding = false; error = ''; }}>
-                <Upload size={16} />Upload PDF
-            </button>
-            <button
-                    class="add-button" disabled={saving} aria-expanded={adding}
-                    onclick={() => { adding = !adding; uploading = false; error = ''; }}
-            >
-                <Plus size={16} />
-                Add article
-            </button>
-        </div>
-    </header>
+<section class="reading home-surface" aria-label="Reading list">
+    <SectionHeader title="Reading list" count={`${unread} UNREAD`}>
+        {#snippet icon()}<BookOpen size={19} strokeWidth={1.7}/>{/snippet}
+        {#snippet actions()}
+            <button class="section-icon-action" onclick={() => refresh()} aria-label="Refresh" title="Refresh reading list"><RefreshCw size={17}/></button>
+            <button class="section-action" disabled={saving} aria-expanded={uploading} onclick={() => { uploading = !uploading; adding = false; error = ''; }}><Upload size={16}/>Upload PDF</button>
+            <button class="section-action primary" disabled={saving} aria-expanded={adding} onclick={() => { adding = !adding; uploading = false; error = ''; }}><Plus size={16}/>Add article</button>
+        {/snippet}
+    </SectionHeader>
 
     <div class="reading-toolbar">
         <div class="tabs" role="tablist" aria-label="Reading views">
@@ -671,7 +651,6 @@
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
                                 <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : article.copy_format === 'html' && article.html_reading_progress && article.html_reading_progress.fraction > .02 && article.html_reading_progress.fraction < .98 ? `Continue · ${Math.round(article.html_reading_progress.fraction*100)}%` : 'Read saved copy'}</a>
-                                <a href={`/api/reading/${article.id}/copy/download`}>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
                             {/if}
                             {#if article.copy_status === 'pending' || article.copy_status === 'processing'}
                                 <span>{article.copy_available ? 'Refreshing saved copy...' : 'Saving copy...'}</span>
@@ -679,8 +658,7 @@
                                 <span class="copy-error" title={article.copy_error ?? undefined}>{article.copy_available ? 'Refresh failed; previous copy kept.' : 'Saved copy unavailable.'}</span>
                                 <button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)}>Retry saved copy</button>
                             {:else if article.copy_available}
-                                <span title={article.copy_warning ?? undefined}>{article.copy_is_legacy ? 'Recovered text copy' : article.copy_warning ? 'Saved with a note' : 'Copy saved'}{article.copy_saved_at ? ` · ${new Date(article.copy_saved_at).toLocaleDateString()}` : ''}</span>
-                                {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)} title="Capture a new version; the current copy is kept until it succeeds">Refresh saved copy</button>{/if}
+                                {#if article.copy_warning || article.copy_is_legacy}<span title={article.copy_warning ?? undefined}>{article.copy_is_legacy ? 'Recovered text copy' : 'Saved with a note'}</span>{/if}
                             {/if}
                         </div>
                         {#if article.index_status === 'failed'}
@@ -693,8 +671,6 @@
                                         onclick={() => retryIndexing(article)}
                                 >Retry now</button>
                             </small>
-                        {:else if article.index_status === 'pending' || article.index_status === 'processing'}
-                            <small>Preparing content search...</small>
                         {/if}
                         {#if search.trim() && article.snippet}
                             <small class="article-snippet">
@@ -704,39 +680,18 @@
                     </div>
 
                     <div class="article-actions">
-                        <button
-                                class="icon-action"
-                                title="Edit title"
-                                aria-label="Edit title"
-                                disabled={busyIds.includes(article.id)}
-                                onclick={() => startEditing(article)}
-                        >
-                            <Pencil size={16} />
-                        </button>
-
-                        <button
-                                class="icon-action"
-                                title={tab === 'queue' ? 'Archive' : 'Restore'}
-                                aria-label={tab === 'queue' ? 'Archive' : 'Restore'}
-                                disabled={busyIds.includes(article.id)}
-                                onclick={() => toggleArchive(article)}
-                        >
-                            {#if tab === 'queue'}
-                                <Archive size={17} />
-                            {:else}
-                                <ArchiveRestore size={17} />
+                        <OverflowMenu label={`Actions for ${article.title}`}>
+                            {#if article.copy_available}
+                                <a href={`/api/reading/${article.id}/copy/download`}><Download size={16}/>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
+                                <p class="menu-note">{article.copy_is_legacy ? 'Recovered text copy' : 'Copy saved'}{article.copy_saved_at ? ` · ${new Date(article.copy_saved_at).toLocaleDateString()}` : ''}{article.copy_warning ? ` · ${article.copy_warning}` : ''}</p>
                             {/if}
-                        </button>
-
-                        <button
-                                class="icon-action delete"
-                                title="Delete permanently"
-                                aria-label="Delete permanently"
-                                disabled={busyIds.includes(article.id)}
-                                onclick={() => remove(article)}
-                        >
-                            <Trash2 size={17} />
-                        </button>
+                            {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)||article.copy_status==='pending'||article.copy_status==='processing'} onclick={() => retryCopy(article)}><RefreshCw size={16}/>{article.copy_status==='failed' ? 'Retry saved copy' : 'Refresh saved copy'}</button>{/if}
+                            {#if article.index_status === 'pending' || article.index_status === 'processing'}<p class="menu-note">Preparing content search…</p>{/if}
+                            <hr/>
+                            <button disabled={busyIds.includes(article.id)} onclick={() => startEditing(article)}><Pencil size={16}/>Edit title</button>
+                            <button disabled={busyIds.includes(article.id)} onclick={() => toggleArchive(article)}>{#if tab === 'queue'}<Archive size={17}/>Archive{:else}<ArchiveRestore size={17}/>Restore{/if}</button>
+                            <button class="menu-danger" disabled={busyIds.includes(article.id)} onclick={() => remove(article)}><Trash2 size={17}/>Delete permanently</button>
+                        </OverflowMenu>
                     </div>
                 </div>
             {/each}
@@ -755,48 +710,8 @@
 
 
 <style>
-    .reading {
-        max-width: 1060px;
-        margin: 42px auto 0;
-        padding: 24px;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-    }
-
-    .reading-header,
-    .heading,
-    .actions,
-    .reading-toolbar,
-    .article,
-    .article-actions {
-        display: flex;
-        align-items: center;
-    }
-
-    .reading-header {
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-    }
-
-    .heading {
-        gap: 12px;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 1.4px;
-    }
-
-    .heading svg {
-        color: var(--highlight);
-    }
-
-    .count {
-        color: var(--muted);
-        font-size: 10px;
-        font-weight: 500;
-        letter-spacing: 0;
-    }
+    .reading { margin:0; }
+    .reading-toolbar,.article,.article-actions { display:flex; align-items:center; }
 
     button {
         border: none;
@@ -814,11 +729,6 @@
         cursor: default;
     }
 
-    .actions {
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
     .icon-action {
         display: grid;
         place-items: center;
@@ -832,23 +742,10 @@
         background: var(--surface-hover);
     }
 
-    .upload-button { border: 1px solid var(--line); }
-
-    .add-button {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        padding: 10px 13px;
-        background: var(--surface-hover);
-        color: var(--text);
-        border-radius: 9px;
-        font-size: 12px;
-    }
-
     .reading-toolbar {
         justify-content: space-between;
         gap: 16px;
-        margin-top: 24px;
+        margin-top: 0;
         padding-bottom: 13px;
         border-bottom: 1px solid var(--line);
     }
@@ -933,6 +830,7 @@
     }
 
     .article {
+        align-items: flex-start;
         gap: 12px;
         padding: 15px 0;
         border-bottom: 1px solid var(--line);
@@ -983,10 +881,6 @@
 
     .article-actions {
         gap: 3px;
-    }
-
-    .article-actions .delete:hover {
-        color: #df9393;
     }
 
     .title-form {
@@ -1049,10 +943,6 @@
     }
 
     @media (max-width: 640px) {
-        .reading {
-            padding: 17px;
-        }
-
         .reading-toolbar {
             flex-direction: column;
             align-items: stretch;
@@ -1072,10 +962,6 @@
 
         .article-actions {
             gap: 0;
-        }
-
-        .article-actions .icon-action {
-            width: 29px;
         }
 
         .add-form {

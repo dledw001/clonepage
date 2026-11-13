@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import SectionHeader from './SectionHeader.svelte';
   import { ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, Plus, RefreshCw, Rss, Search, Settings2, Trash2, X } from '@lucide/svelte';
   import { FeedReader, type ReaderState, type Discovery, type FeedPreview } from '../lib/feed-reader';
 
@@ -84,15 +85,15 @@
   }
 </script>
 
-<section class="feeds" aria-label="Feeds">
-  <header class="feeds-header">
-    <div class="heading"><Rss size={19} strokeWidth={1.7} /><h2>FEEDS</h2><span class="count">{readerState.data?.unread ?? 0} UNREAD</span></div>
-    <div class="actions">
-      <button class="icon-action" onclick={() => reader.refreshFeeds()} disabled={!subscriptions.length || readerState.busy.includes('refresh')} aria-label="Refresh feeds" title="Check feeds for new stories"><RefreshCw size={17} /></button>
-      <button class="icon-action" class:active={managing} onclick={() => managing = !managing} aria-label="Manage feeds" aria-expanded={managing} title="Manage subscriptions"><Settings2 size={17} /></button>
-      <button class="add-button" onclick={() => adding = !adding} aria-expanded={adding}><Plus size={16} />Add feed</button>
-    </div>
-  </header>
+<section class="feeds home-surface" aria-label="Feeds">
+  <SectionHeader title="Feeds" count={`${readerState.data?.unread ?? 0} UNREAD`}>
+    {#snippet icon()}<Rss size={19} strokeWidth={1.7}/>{/snippet}
+    {#snippet actions()}
+      <button class="section-icon-action" onclick={() => reader.refreshFeeds()} disabled={!subscriptions.length || readerState.busy.includes('refresh')} aria-label="Refresh feeds" title="Check feeds for new stories"><RefreshCw size={17}/></button>
+      <button class="section-icon-action" class:active={managing} onclick={() => managing = !managing} aria-label="Manage feeds" aria-expanded={managing} title="Manage subscriptions"><Settings2 size={17}/></button>
+      <button class="section-action primary" onclick={() => adding = !adding} aria-expanded={adding}><Plus size={16}/>Add feed</button>
+    {/snippet}
+  </SectionHeader>
 
   <div class="toolbar">
     <div class="tabs" role="tablist" aria-label="Feed views">
@@ -163,19 +164,14 @@
 </section>
 
 <style>
-  .feeds { max-width: 1060px; margin: 38px auto 0; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
-  .feeds-header, .heading, .actions, .toolbar, .tabs, .feed-search, .entry, .list-footer, .subscription { display: flex; align-items: center; }
-  .feeds-header { justify-content: space-between; gap: 16px; margin-bottom: 22px; }
-  .heading { gap: 11px; color: var(--highlight); flex-wrap: wrap; }
-  h2 { font-size: 11px; letter-spacing: 1.8px; font-weight: 600; margin: 0; color: var(--text); }
-  .count { font-size: 9px; letter-spacing: 1px; color: var(--muted); margin-left: 5px; }
-  .actions { gap: 13px; }
+  .feeds { margin:0; }
+  .toolbar, .tabs, .feed-search, .entry, .list-footer, .subscription { display: flex; align-items: center; }
+  .icon-action { display:inline-flex; align-items:center; justify-content:center; padding:5px; flex-shrink:0; }
+  .icon-action:hover { color:var(--highlight); }
   button { border: 0; cursor: pointer; font: inherit; color: var(--muted); background: transparent; }
   button:disabled { cursor: default; opacity: .5; }
   button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid var(--highlight); outline-offset: 4px; }
-  .icon-action { display: inline-flex; align-items: center; justify-content: center; padding: 5px; flex-shrink: 0; }
-  .icon-action:hover, .icon-action.active { color: var(--highlight); }
-  .add-button, form > button[type=submit], .subscribe { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-hover); color: var(--text); padding: 9px 12px; font-size: 11px; }
+  form > button[type=submit], .subscribe { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-hover); color: var(--text); padding: 9px 12px; font-size: 11px; }
   .toolbar { gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   .tabs { gap: 4px; padding: 3px; border-radius: 8px; background: var(--bg); }
   .tabs button { padding: 7px 10px; border-radius: 6px; font-size: 11px; }
@@ -223,6 +219,6 @@
   .list-footer { justify-content: space-between; gap: 10px; margin-top: 17px; color: var(--muted); font-size: 10px; }
   .list-footer > div { display: flex; gap: 16px; }
   .list-footer button { color: var(--highlight); padding: 4px 0; font-size: 11px; }
-  @media (max-width: 700px) { .toolbar { gap: 10px; } .feed-search { max-width: none; } .mark-all { margin-left: auto; } .feeds-header { flex-wrap: wrap; } }
-  @media (max-width: 540px) { .feeds { padding: 20px; margin-top: 24px; } .feeds-header { gap: 15px; } .heading { gap: 8px; } .actions { gap: 10px; margin-left: auto; } .count { margin-left: 0; font-size: 8px; } .toolbar { display: grid; grid-template-columns: auto minmax(0,1fr); } select { max-width: none; width: 100%; } .feed-search { margin: 0; min-width: 0; } .mark-all { justify-self: end; margin: 0; } form { flex-wrap: wrap; } form input { flex-basis: 100%; } .add-panel, .subscriptions { padding: 13px; } .entry { gap: 9px; position: relative; padding-bottom: 40px; } .save-entry { position: absolute; right: 0; bottom: 12px; } .entry-info > a { font-size: 12px; } .list-footer { align-items: flex-start; } }
+  @media (max-width: 700px) { .toolbar { gap: 10px; } .feed-search { max-width: none; } .mark-all { margin-left: auto; } }
+  @media (max-width: 540px) { .toolbar { display: grid; grid-template-columns: auto minmax(0,1fr); } select { max-width: none; width: 100%; } .feed-search { margin: 0; min-width: 0; } .mark-all { justify-self: end; margin: 0; } form { flex-wrap: wrap; } form input { flex-basis: 100%; } .add-panel, .subscriptions { padding: 13px; } .entry { gap: 9px; position: relative; padding-bottom: 40px; } .save-entry { position: absolute; right: 0; bottom: 12px; } .entry-info > a { font-size: 12px; } .list-footer { align-items: flex-start; } }
 </style>

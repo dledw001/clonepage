@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from 'svelte';
-  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, LayoutGrid, Pencil, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
   import { AvailabilityStore, availabilityStatus, emptyAvailability } from '../lib/availability';
+  import SectionHeader from './SectionHeader.svelte';
   import ServiceSetup from './ServiceSetup.svelte';
   import { ShortcutDrag } from '../lib/shortcut-drag';
   import { groupShortcuts, orderShortcutGroup, type Shortcut, type ShortcutDraft, type ShortcutState, type ShortcutStore } from '../lib/shortcuts';
@@ -304,13 +305,11 @@
   {/if}
 {/snippet}
 
-<section class="shortcuts" aria-label="Your places">
-  <div class="section-header">
-    <span>YOUR PLACES</span>
-    <div class="shortcut-heading-actions"><span class="section-count">{data.loaded ? String(data.items.length).padStart(2, '0') : '—'} SHORTCUTS</span>
-      <button class="manage-button" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={14} />{managing ? 'Done' : 'Manage shortcuts'}</button>
-    </div>
-  </div>
+<section class="shortcuts home-surface" aria-label="Your places">
+  <SectionHeader title="Your places" count={`${data.loaded ? data.items.length : '—'} SHORTCUTS`}>
+    {#snippet icon()}<LayoutGrid size={19} strokeWidth={1.7}/>{/snippet}
+    {#snippet actions()}<button class="section-action" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={16}/>{managing ? 'Done' : 'Manage shortcuts'}</button>{/snippet}
+  </SectionHeader>
 
   {#if data.error && !editorOpen}<p class="shortcut-error" role="alert">{data.error}<button onclick={() => store.refresh()} disabled={data.loading || data.busy}>Try again</button></p>{/if}
   {#if !data.loaded}<p class="shortcut-status" role="status">{data.loading ? 'Loading your places...' : 'Your shortcuts are unavailable.'}</p>{/if}
@@ -454,15 +453,13 @@
   .drag-status { position: fixed; z-index: 110; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); width: max-content; padding: 12px 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-hover); color: var(--text); box-shadow: 0 8px 25px rgba(0,0,0,.25); font-size: 11px; line-height: 1.7; margin: 0; pointer-events: none; }
   .drag-status:empty { display: none; }
 
-  .shortcut-heading-actions, .manage-button, .manager-heading, .editor-heading, .editor-primary, .row-actions, .managed-row, .editor-footer, .color-picker, .delete-confirm { display: flex; align-items: center; gap: 10px; }
+  .manager-heading, .editor-heading, .editor-primary, .row-actions, .managed-row, .editor-footer, .color-picker, .delete-confirm { display: flex; align-items: center; gap: 10px; }
   .manager-add-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
-  .shortcut-heading-actions { gap: 18px; }
   button, input, select, textarea { font: inherit; }
   button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
   button:disabled { cursor: default; opacity: .4; }
   button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--highlight); outline-offset: 3px; }
-  .manage-button { font-size: 10px; padding: 5px 0; white-space: nowrap; }
-  .manage-button:hover, .manage-button.active, .small-icon:hover { color: var(--highlight); }
+  .small-icon:hover { color: var(--highlight); }
   .shortcut-manager { margin-bottom: 22px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
   .manager-heading, .editor-heading { justify-content: space-between; }
   h2, h3 { color: var(--text); font-weight: 500; font-size: 15px; margin: 0; }
@@ -505,5 +502,5 @@
   .shortcut-status, .shortcut-error { font-size: 12px; line-height: 1.8; color: var(--muted); }
   .shortcut-error { color: var(--warning); }
   .shortcut-error button { color: var(--highlight); margin-left: 12px; }
-  @media (max-width: 650px) { .section-header { flex-wrap: wrap; gap: 12px; } .shortcut-heading-actions { gap: 12px; } .manager-heading { align-items: flex-start; gap: 15px; } .shortcut-manager { padding: 18px; } .shortcut-editor { padding: 16px; } .editor-fields { grid-template-columns: 1fr; } .appearance { grid-template-columns: 1fr; gap: 20px; } .preview { max-width: 210px; } .row-actions { gap: 0; } .small-icon { padding: 7px 5px; } }
+  @media (max-width: 650px) { .manager-heading { align-items: flex-start; gap: 15px; } .shortcut-manager { padding: 18px; } .shortcut-editor { padding: 16px; } .editor-fields { grid-template-columns: 1fr; } .appearance { grid-template-columns: 1fr; gap: 20px; } .preview { max-width: 210px; } .row-actions { gap: 0; } .small-icon { padding: 7px 5px; } }
 </style>
