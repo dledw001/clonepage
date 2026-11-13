@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import { onMount } from 'svelte';
   import { Activity, ArrowUpRight, Cpu, HardDrive, MemoryStick, RefreshCw, ShieldCheck, Thermometer, TriangleAlert, WifiOff } from '@lucide/svelte';
   import MetricChart from './MetricChart.svelte';
@@ -190,7 +191,7 @@
 <section class="infrastructure">
   <header class="infra-heading">
     <div>
-      <div class="infra-eyebrow"><span></span>YOUR INFRASTRUCTURE</div>
+      <div class="infra-eyebrow"><featureIcons.infrastructure size={iconSizes.section}/>YOUR INFRASTRUCTURE</div>
       <h1>Your NAS, at a glance.</h1>
       <p>CPU, memory, and drive health, with a little history.</p>
     </div>
@@ -202,53 +203,53 @@
           <button class:active={temperatureUnit === 'F'} aria-pressed={temperatureUnit === 'F'} onclick={() => setTemperatureUnit('F')} title="Fahrenheit">°F</button>
         </div>
         <button class="refresh-button" onclick={refreshAll} disabled={refreshing} aria-label="Refresh infrastructure" title="Refresh readings and history">
-          <RefreshCw size={15} class={refreshing ? 'refreshing' : ''} /><span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
+          <RefreshCw size={iconSizes.action} class={refreshing ? 'refreshing' : ''} /><span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
         </button>
       </div>
     </div>
   </header>
 
   {#if notices.length}
-    <div class="source-notice" role="status"><TriangleAlert size={17} /><div>{#each notices as notice}<p>{notice}</p>{/each}</div></div>
+    <div class="source-notice" role="status"><TriangleAlert size={iconSizes.action} /><div>{#each notices as notice}<p>{notice}</p>{/each}</div></div>
   {/if}
 
   {#if !refreshing && (refreshError || sourceErrors.length) && (!snapshot || (!snapshot.metrics.length && !snapshot.readings.length))}
-    <div class="unavailable"><WifiOff size={30} strokeWidth={1.3} /><h2>The NAS is out of reach.</h2><p>Check the NAS Temps collector and try again.</p><button onclick={refreshAll}>Try again</button></div>
+    <div class="unavailable"><WifiOff size={iconSizes.empty} /><h2>The NAS is out of reach.</h2><p>Check the NAS Temps collector and try again.</p><button onclick={refreshAll}>Try again</button></div>
   {:else}
     <div class="summary-grid" aria-busy={refreshing && !snapshot}>
       <article class="summary-card">
-        <div class="card-label"><Cpu size={17} strokeWidth={1.6} /><span>CPU UTILIZATION</span></div>
+        <div class="card-label"><Cpu size={iconSizes.action} /><span>CPU UTILIZATION</span></div>
         <div class="summary-value">{formatValue(cpuReading?.value, '%')}</div>
         <div class="usage-meter" aria-hidden="true"><span style:width={`${Math.max(0, Math.min(100, cpuReading?.value ?? 0))}%`}></span></div>
         <div class="reading-age" class:stale={isStale(cpuReading, elapsed)}>{cpuReading && isStale(cpuReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuReading, elapsed))}</div>
       </article>
       <article class="summary-card ram-card">
-        <div class="card-label"><MemoryStick size={17} strokeWidth={1.6} /><span>RAM UTILIZATION</span></div>
+        <div class="card-label"><MemoryStick size={iconSizes.action} /><span>RAM UTILIZATION</span></div>
         <div class="summary-value">{formatValue(ramReading?.value, '%')}</div>
         <div class="usage-meter" aria-hidden="true"><span style:width={`${Math.max(0, Math.min(100, ramReading?.value ?? 0))}%`}></span></div>
         <div class="ram-details">{#each ramDetails as detail}<span class:stale={isStale(detail.reading, elapsed)}>{detail.label} <b>{formatValue(detail.reading?.value, 'GiB')}</b>{#if detail.reading && isStale(detail.reading, elapsed)} (stale){/if}</span>{/each}</div>
         <div class="reading-age" class:stale={isStale(ramReading, elapsed)}>{ramReading && isStale(ramReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(ramReading, elapsed))}</div>
       </article>
       <article class="summary-card">
-        <div class="card-label"><Thermometer size={17} strokeWidth={1.6} /><span>CPU TEMPERATURE</span></div>
+        <div class="card-label"><Thermometer size={iconSizes.action} /><span>CPU TEMPERATURE</span></div>
         <div class="summary-value">{displayTemperature(cpuTempReading?.value)}<small>{temperatureUnit}</small></div>
         <div class="metric-context">{cpuTempMetric?.label ?? 'Waiting for the collector'}</div>
         <div class="reading-age" class:stale={isStale(cpuTempReading, elapsed)}>{cpuTempReading && isStale(cpuTempReading, elapsed) ? 'Stale · ' : ''}{ageLabel(readingAge(cpuTempReading, elapsed))}</div>
       </article>
       <article class="summary-card hdd-average">
-        <div class="card-label"><HardDrive size={17} strokeWidth={1.6} /><span>AVG HDD TEMP</span></div>
+        <div class="card-label"><HardDrive size={iconSizes.action} /><span>AVG HDD TEMP</span></div>
         <div class="summary-value">{displayTemperature(hddAverage.value)}<small>{temperatureUnit}</small></div>
         <div class="metric-context">{hddAverage.count} of {hddAverage.total} HDD {hddAverage.total === 1 ? 'drive' : 'drives'} reporting</div>
         <div class="reading-age" class:stale={hddAverage.count < hddAverage.total}>{hddAverage.oldestAge === null ? 'No current readings' : ageLabel(hddAverage.oldestAge)}</div>
       </article>
       <article class="summary-card nvme-average">
-        <div class="card-label"><HardDrive size={17} strokeWidth={1.6} /><span>AVG NVME TEMP</span></div>
+        <div class="card-label"><HardDrive size={iconSizes.action} /><span>AVG NVME TEMP</span></div>
         <div class="summary-value">{displayTemperature(nvmeAverage.value)}<small>{temperatureUnit}</small></div>
         <div class="metric-context">{nvmeAverage.count} of {nvmeAverage.total} NVMe {nvmeAverage.total === 1 ? 'drive' : 'drives'} reporting</div>
         <div class="reading-age" class:stale={nvmeAverage.count < nvmeAverage.total}>{nvmeAverage.oldestAge === null ? 'No current readings' : ageLabel(nvmeAverage.oldestAge)}</div>
       </article>
       <article class="summary-card drive-summary">
-        <div class="card-label"><ShieldCheck size={17} strokeWidth={1.6} /><span>DRIVE STATUS</span></div>
+        <div class="card-label"><ShieldCheck size={iconSizes.action} /><span>DRIVE STATUS</span></div>
         <div class="summary-value">{driveSummary.total ? `${driveSummary.passed}/${driveSummary.total}` : '—'}<small>SMART passed</small></div>
         <div class="metric-context" class:stale={driveSummary.failed + driveSummary.attention + driveSummary.unknown > 0}>{driveSummaryDetails}</div>
         <div class="reading-age">SMART self-assessment · see details below</div>
@@ -291,7 +292,7 @@
       <MetricChart title="Temperature history" description="Select the sensors above to compare their temperatures." series={temperatureSeries} unit={temperatureUnit} start={chartEnd - range} end={chartEnd} loading={historyLoading || (!snapshot && refreshing)}
                    error={temperatures.some(m => historyErrors[m.key]) ? 'Some temperature history could not be refreshed.' : ''} />
     </section>
-    <div class="infra-footnote"><Activity size={13} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><details><summary>Details</summary><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={12} /></a></details></div>
+    <div class="infra-footnote"><Activity size={iconSizes.inline} /><span>Readings refresh every 10 seconds. History refreshes every minute while this page is visible.</span><details><summary>Details</summary><a href="/api/infrastructure/snapshot" target="_blank" rel="noopener noreferrer">View readings <ArrowUpRight size={iconSizes.inline} /></a></details></div>
   {/if}
   <ContainerUpdates revision={historyRevision} {monitorFocus} />
 </section>
@@ -300,7 +301,6 @@
   .infrastructure { max-width: 1060px; margin: 66px auto 0; padding-bottom: 10px; }
   .infra-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 33px; }
   .infra-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 9px; letter-spacing: 2.4px; font-weight: 700; color: var(--highlight); }
-  .infra-eyebrow > span { width: 20px; height: 1px; background: var(--highlight); opacity: .6; }
   h1 { margin: 17px 0 10px; font-size: 36px; }
   .infra-heading p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.7; }
   .collection-actions { display: flex; align-items: center; gap: 16px; padding-bottom: 3px; }

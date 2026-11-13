@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import { onMount, tick, untrack } from 'svelte';
-  import { ArrowUpRight, ChevronDown, Container, RefreshCw, TriangleAlert } from '@lucide/svelte';
+  import { ArrowUpRight, ChevronDown, RefreshCw, TriangleAlert } from '@lucide/svelte';
   import { fetchJson } from '../lib/infrastructure';
   import { containerVersion, effectiveState, groupContainers, monitorMatches, parseMonitorTarget, wudAge, type ContainerSnapshot } from '../lib/container-updates';
 
@@ -96,13 +97,13 @@
 {#if snapshot?.configured || error || focusTarget}
   <section id="container-updates" class="container-updates" aria-labelledby="container-updates-title" aria-busy={loading}>
     <header class="section-heading">
-      <div><div class="container-eyebrow"><Container size={15} />CONTAINERS</div><h2 id="container-updates-title">Container updates</h2><p>{projects.length} project groups · {snapshot?.containers.length ?? 0} containers watched by WUD</p></div>
+      <div><div class="container-eyebrow"><featureIcons.containers size={iconSizes.section} />CONTAINERS</div><h2 id="container-updates-title">Container updates</h2><p>{projects.length} project groups · {snapshot?.containers.length ?? 0} containers watched by WUD</p></div>
       <div class="actions">
-        {#if snapshot?.url}<a href={snapshot.url} target="_blank" rel="noopener noreferrer">Open WUD <ArrowUpRight size={13} /></a>{/if}
-        <button onclick={refresh} disabled={loading} aria-label="Refresh container update results" title="Read the latest results from WUD"><RefreshCw size={14} /><span>{loading ? 'Refreshing' : 'Refresh'}</span></button>
+        {#if snapshot?.url}<a href={snapshot.url} target="_blank" rel="noopener noreferrer">Open WUD <ArrowUpRight size={iconSizes.inline} /></a>{/if}
+        <button onclick={refresh} disabled={loading} aria-label="Refresh container update results" title="Read the latest results from WUD"><RefreshCw size={iconSizes.action} /><span>{loading ? 'Refreshing' : 'Refresh'}</span></button>
       </div>
     </header>
-    {#if notice}<div class="notice" role="status"><TriangleAlert size={16} /><p>{notice}{snapshot?.fetched_at ? ' Showing previous details; update status is unavailable.' : ''}</p></div>{/if}
+    {#if notice}<div class="notice" role="status"><TriangleAlert size={iconSizes.action} /><p>{notice}{snapshot?.fetched_at ? ' Showing previous details; update status is unavailable.' : ''}</p></div>{/if}
     {#if targetNotice}<p class="target-notice" role="status">{targetNotice}</p>{/if}
     <div class="summary-grid">
       <article><span>PROJECTS WITH UPDATES</span><strong>{stale ? '—' : projects.filter(project => project.updates > 0).length}</strong></article>
@@ -121,8 +122,8 @@
       {#each visibleProjects as project (project.id)}
         <details id={projectId(project.id)} class="project" open={expanded.includes(project.id)} ontoggle={event => toggleProject(project.id, event.currentTarget.open)}>
           <summary>
-            <span class="project-name"><Container size={17} /><span><strong>{project.name}</strong><small>{project.containers.length} container{project.containers.length === 1 ? '' : 's'} · {project.watcher}</small></span></span>
-            <span class="project-status"><span class="badge" class:update={project.state === 'update'} class:unknown={project.state === 'unknown'}>{stale ? 'Status unavailable' : project.updates ? `${project.updates} update${project.updates === 1 ? '' : 's'}` : project.unknown ? `${project.unknown} incomplete` : 'No updates reported'}</span><ChevronDown size={15} /></span>
+            <span class="project-name"><featureIcons.containers size={iconSizes.action} /><span><strong>{project.name}</strong><small>{project.containers.length} container{project.containers.length === 1 ? '' : 's'} · {project.watcher}</small></span></span>
+            <span class="project-status"><span class="badge" class:update={project.state === 'update'} class:unknown={project.state === 'unknown'}>{stale ? 'Status unavailable' : project.updates ? `${project.updates} update${project.updates === 1 ? '' : 's'}` : project.unknown ? `${project.unknown} incomplete` : 'No updates reported'}</span><ChevronDown size={iconSizes.action} /></span>
           </summary>
           <div class="container-list">
             {#each project.containers as item (`${item.watcher}:${item.id}`)}

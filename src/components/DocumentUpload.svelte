@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { FileText, Upload, X } from '@lucide/svelte';
 
   let { saving, onupload, onclose }: {
@@ -20,13 +21,13 @@
 </script>
 
 <form class="document-upload" onsubmit={submit} aria-label="Upload a PDF">
-  <header><h3><FileText size={17} />Upload a PDF</h3><button type="button" class="close" aria-label="Cancel PDF upload" disabled={saving} onclick={onclose}><X size={17} /></button></header>
+  <header><h3><FileText size={iconSizes.action} />Upload a PDF</h3><button type="button" class="close" aria-label="Cancel PDF upload" disabled={saving} onclick={onclose}><X size={iconSizes.action} /></button></header>
   <p>Keep a document on your NAS and find it alongside your saved articles.</p>
   <div class="fields">
     <label>PDF file<input type="file" accept=".pdf,application/pdf" bind:files required disabled={saving} onchange={() => error = ''} /></label>
     <label>Title (optional)<input bind:value={title} maxlength="200" placeholder="Use the document title or filename" disabled={saving} /></label>
   </div>
-  <div class="form-footer"><small>PDFs up to 25 MB. The original is kept; text is indexed for search when available.</small><button class="upload" type="submit" disabled={saving || !files?.length}><Upload size={15} />{saving ? 'Uploading...' : 'Upload PDF'}</button></div>
+  <div class="form-footer"><small>PDFs up to 25 MB. The original is kept; text is indexed for search when available.</small><button class="upload" type="submit" disabled={saving || !files?.length}><Upload size={iconSizes.action} />{saving ? 'Uploading...' : 'Upload PDF'}</button></div>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 </form>
 

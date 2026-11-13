@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { featureIcons, iconSizes, lucideDefaults } from './lib/icons';
   import { onMount, tick } from 'svelte';
-  import { ArrowRight, Command, Moon, Search, Sun, House, Activity, Newspaper, Settings2 } from '@lucide/svelte';
+  import { setLucideProps } from '@lucide/svelte/context';
+
+  import { ArrowRight, Command, Moon, Search, Sun, Settings2 } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
@@ -17,6 +20,8 @@
   import Shortcuts from './components/Shortcuts.svelte';
   import { shortcutIcon } from './lib/shortcut-icons';
   import { ShortcutStore, type Shortcut, type ShortcutState } from './lib/shortcuts';
+
+  setLucideProps(lucideDefaults);
 
   let shortcutState = $state<ShortcutState>({ items: [], revision: 0, loaded: false, loading: false, busy: false, conflict: false, error: '' });
   const shortcutStore = new ShortcutStore(next => shortcutState = next);
@@ -236,22 +241,22 @@
       </a>
 
       <nav class="page-navigation" aria-label="Main navigation">
-        <a href="/" class:current={page === 'home'} aria-current={page === 'home' ? 'page' : undefined} onclick={event => navigate(event, '/')}><House size={15} strokeWidth={1.7} />Home</a>
-        <a href="/infrastructure" class:current={page === 'infrastructure'} aria-current={page === 'infrastructure' ? 'page' : undefined} onclick={event => navigate(event, '/infrastructure')}><Activity size={15} strokeWidth={1.7} />Infrastructure</a>
-        <a href="/hacker-news" class:current={page === 'hacker-news'} aria-current={page === 'hacker-news' ? 'page' : undefined} onclick={event => navigate(event, '/hacker-news')}><Newspaper size={15} strokeWidth={1.7} />Hacker News</a>
+        <a href="/" class:current={page === 'home'} aria-current={page === 'home' ? 'page' : undefined} onclick={event => navigate(event, '/')}><featureIcons.home size={iconSizes.navigation} />Home</a>
+        <a href="/infrastructure" class:current={page === 'infrastructure'} aria-current={page === 'infrastructure' ? 'page' : undefined} onclick={event => navigate(event, '/infrastructure')}><featureIcons.infrastructure size={iconSizes.navigation} />Infrastructure</a>
+        <a href="/hacker-news" class:current={page === 'hacker-news'} aria-current={page === 'hacker-news' ? 'page' : undefined} onclick={event => navigate(event, '/hacker-news')}><featureIcons.hackerNews size={iconSizes.navigation} />Hacker News</a>
       </nav>
 
       <div class="top-actions">
-        {#if page==='home'}<button class="icon-button" aria-label="Customize homepage" title="Customize homepage" aria-expanded={customizingHome} onclick={()=>customizingHome=!customizingHome}><Settings2 size={18}/></button>{/if}
+        {#if page==='home'}<button class="icon-button" aria-label="Customize homepage" title="Customize homepage" aria-expanded={customizingHome} onclick={()=>customizingHome=!customizingHome}><Settings2 size={iconSizes.action}/></button>{/if}
         <button
           class="icon-button"
           onclick={toggleTheme}
           aria-label="Toggle color theme"
         >
           {#if theme === 'dark'}
-            <Sun size={19} strokeWidth={1.7} />
+            <Sun size={iconSizes.action} />
           {:else}
-            <Moon size={19} strokeWidth={1.7} />
+            <Moon size={iconSizes.action} />
           {/if}
         </button>
       </div>
@@ -283,7 +288,7 @@
         {/if}
         <div class="search-region" bind:this={searchRegion}>
           <div class="search-box" class:active={paletteOpen}>
-            <Search size={21} strokeWidth={1.8} />
+            <Search size={iconSizes.search} />
 
             <input
               bind:this={searchInput}
@@ -307,9 +312,9 @@
               </div>
 
               {#snippet resultContent(command: CommandItem)}
-                <span class="result-icon"><command.icon size={19} strokeWidth={1.7} /></span>
+                <span class="result-icon"><command.icon size={iconSizes.shortcut} /></span>
                 <span class="result-text"><strong>{command.name}</strong><small>{command.description}</small></span>
-                <ArrowRight size={16} />
+                <ArrowRight size={iconSizes.action} />
               {/snippet}
               {#if !shortcutState.loaded}<p class="command-status">{shortcutState.loading ? 'Loading shortcuts...' : 'Shortcuts could not be loaded.'}</p>{:else if !commands.length}<p class="command-status">Add your first shortcut in Your Places.</p>{/if}
               {#each matches as command, index (command.id)}
@@ -330,9 +335,9 @@
 
               {#if query.trim()}
                 <a class="web-result" href={webSearchUrl(query)}>
-                  <Search size={17} />
+                  <Search size={iconSizes.action} />
                   <span>Search the web for "{query}"</span>
-                  <ArrowRight size={16} />
+                  <ArrowRight size={iconSizes.action} />
                 </a>
               {/if}
             </div>
@@ -374,7 +379,7 @@
 
   {#if toast}
     <div class="toast">
-      <Command size={16} />
+      <Command size={iconSizes.action} />
       {toast}
     </div>
   {/if}

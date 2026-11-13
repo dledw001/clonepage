@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import SectionHeader from './SectionHeader.svelte';
   import { onMount,untrack } from 'svelte';
-  import { ArrowRight,BookOpen } from '@lucide/svelte';
+  import { ArrowRight } from '@lucide/svelte';
   import { HomeDataStore,type ContinueSnapshot,type HomeDataState } from '../lib/home';
   let {active=true,previewCount=3,onnavigate}:{active?:boolean;previewCount?:number;onnavigate?:(event:MouseEvent,path:string)=>void}=$props();
   let reading=$state<HomeDataState<ContinueSnapshot>>({data:null,loading:false,error:''});
@@ -13,13 +14,13 @@
 {#if reading.data?.items.length||reading.error}
 <section class="continue home-surface" aria-label="Continue reading">
   <SectionHeader title="Continue reading">
-    {#snippet icon()}<BookOpen size={19} strokeWidth={1.7}/>{/snippet}
-    {#snippet actions()}<a class="section-action" href="/?section=reading#home-reading" onclick={event=>onnavigate?.(event,'/?section=reading#home-reading')}>Reading list<ArrowRight size={15}/></a>{/snippet}
+    {#snippet icon()}<featureIcons.reading size={iconSizes.section}/>{/snippet}
+    {#snippet actions()}<a class="section-action" href="/?section=reading#home-reading" onclick={event=>onnavigate?.(event,'/?section=reading#home-reading')}>Reading list<ArrowRight size={iconSizes.action}/></a>{/snippet}
   </SectionHeader>
   {#if reading.error}<p class="error" role="status">{reading.error}</p>{/if}
   <div class="resume-list">
     {#each reading.data?.items.slice(0,previewCount)??[] as item(item.id)}
-      <a class="resume-link" href={`/reading/${item.id}`} onclick={event=>onnavigate?.(event,`/reading/${item.id}`)}><strong>{item.title}</strong><span>{item.label}</span><ArrowRight size={15}/></a>
+      <a class="resume-link" href={`/reading/${item.id}`} onclick={event=>onnavigate?.(event,`/reading/${item.id}`)}><strong>{item.title}</strong><span>{item.label}</span><ArrowRight size={iconSizes.action}/></a>
     {/each}
   </div>
 </section>

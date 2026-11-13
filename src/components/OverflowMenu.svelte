@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import { Ellipsis } from '@lucide/svelte';
@@ -30,7 +31,7 @@
 </script>
 
 <details class="overflow-menu" class:upwards={opensUp} name="reading-article-actions" bind:this={details}>
-  <summary aria-label={label} title={label}><Ellipsis size={19}/></summary>
+  <summary aria-label={label} title={label}><Ellipsis size={iconSizes.section}/></summary>
   <div class="menu-panel" style:max-height={panelMaxHeight}>{@render children()}</div>
 </details>
 

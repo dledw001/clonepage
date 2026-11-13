@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import { onMount, untrack } from 'svelte';
   import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Moon, RefreshCw, Sun, ArrowUpRight } from '@lucide/svelte';
   import SectionHeader from './SectionHeader.svelte';
@@ -27,14 +28,14 @@
 
 <section class="weather home-surface" aria-label="Weather" aria-busy={state.loading}>
   <SectionHeader title="Weather" subtitle={data?.place ? `${data.place} · ${data.location}` : preferences.location}>
-    {#snippet icon()}<CloudSun size={19} strokeWidth={1.7}/>{/snippet}
-    {#snippet actions()}<button class="section-icon-action" aria-label="Refresh weather" title="Refresh cached weather; wttr.in is checked at most every 15 minutes" disabled={state.loading} onclick={()=>store.refresh()}><RefreshCw size={17}/></button>{/snippet}
+    {#snippet icon()}<featureIcons.weather size={iconSizes.section}/>{/snippet}
+    {#snippet actions()}<button class="section-icon-action" aria-label="Refresh weather" title="Refresh cached weather; wttr.in is checked at most every 15 minutes" disabled={state.loading} onclick={()=>store.refresh()}><RefreshCw size={iconSizes.action}/></button>{/snippet}
   </SectionHeader>
   {#if error}<p class="weather-error" role="status">{error}{current?' Showing previously retrieved weather.':''}</p>{/if}
   {#if current}
     <div class="weather-body">
       <div class="conditions">
-        <div class="temperature"><CurrentIcon size={39} strokeWidth={1.3}/><strong>{temperatureText(current.temperature,units)}</strong></div>
+        <div class="temperature"><CurrentIcon size={iconSizes.weather}/><strong>{temperatureText(current.temperature,units)}</strong></div>
         <p class="description">{current.description}</p>
         <p class="feels">Feels like {temperatureText(current.feels_like,units)}</p>
       </div>
@@ -49,12 +50,12 @@
       <div class="outlook" aria-label="Three-day weather outlook">
         {#each data.forecast as day(day.date)}
           {@const ForecastIcon=icons[weatherKind(day.code,day.description??'',true)]}
-          <div class="forecast-day"><time datetime={day.date}>{forecastDate(day.date)}</time><div class="forecast-condition"><ForecastIcon size={22} strokeWidth={1.5}/><span>{day.description??'Forecast unavailable'}</span></div><p>{temperatureText(day.high,units)}<span> / {temperatureText(day.low,units)}</span></p></div>
+          <div class="forecast-day"><time datetime={day.date}>{forecastDate(day.date)}</time><div class="forecast-condition"><ForecastIcon size={iconSizes.forecast}/><span>{day.description??'Forecast unavailable'}</span></div><p>{temperatureText(day.high,units)}<span> / {temperatureText(day.low,units)}</span></p></div>
         {/each}
       </div>
     {/if}
   {:else if !error}<p class="weather-empty" role="status">Loading weather…</p>{/if}
-  <footer class="weather-footer"><span>{data?.fetched_at?`${data.stale||state.error?'Previous weather · ':''}Retrieved ${new Date(data.fetched_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'Weather from wttr.in'}</span><a href={weatherUrl(data?.location??preferences.location,units)} target="_blank" rel="noopener noreferrer">wttr.in<ArrowUpRight size={13}/></a></footer>
+  <footer class="weather-footer"><span>{data?.fetched_at?`${data.stale||state.error?'Previous weather · ':''}Retrieved ${new Date(data.fetched_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'Weather from wttr.in'}</span><a href={weatherUrl(data?.location??preferences.location,units)} target="_blank" rel="noopener noreferrer">wttr.in<ArrowUpRight size={iconSizes.inline}/></a></footer>
 </section>
 
 <style>

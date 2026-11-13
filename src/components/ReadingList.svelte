@@ -1,15 +1,11 @@
 
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
     import { onMount } from 'svelte';
     import SectionHeader from './SectionHeader.svelte';
     import OverflowMenu from './OverflowMenu.svelte';
     import DocumentUpload from './DocumentUpload.svelte';
-    import {
-        Archive, ArchiveRestore, ArrowUpRight,
-        BookOpen, Check, Circle, CircleCheck,
-        Pencil, Plus, RefreshCw, Search,
-        Trash2, Upload, Download, X
-    } from '@lucide/svelte';
+    import { Archive, ArchiveRestore, ArrowUpRight, Check, Circle, CircleCheck, Pencil, Plus, RefreshCw, Search, Trash2, Upload, Download, X } from '@lucide/svelte';
 
     let { active = true, previewCount = 3, onnavigate }: { active?: boolean; previewCount?: number; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
 
@@ -492,11 +488,11 @@
 
 <section class="reading home-surface" aria-label="Reading list">
     <SectionHeader title="Reading list" count={`${unread} UNREAD`}>
-        {#snippet icon()}<BookOpen size={19} strokeWidth={1.7}/>{/snippet}
+        {#snippet icon()}<featureIcons.reading size={iconSizes.section}/>{/snippet}
         {#snippet actions()}
-            <button class="section-icon-action" onclick={() => refresh()} aria-label="Refresh" title="Refresh reading list"><RefreshCw size={17}/></button>
-            <button class="section-action" disabled={saving} aria-expanded={uploading} onclick={() => { uploading = !uploading; adding = false; error = ''; }}><Upload size={16}/>Upload PDF</button>
-            <button class="section-action primary" disabled={saving} aria-expanded={adding} onclick={() => { adding = !adding; uploading = false; error = ''; }}><Plus size={16}/>Add article</button>
+            <button class="section-icon-action" onclick={() => refresh()} aria-label="Refresh" title="Refresh reading list"><RefreshCw size={iconSizes.action}/></button>
+            <button class="section-action" disabled={saving} aria-expanded={uploading} onclick={() => { uploading = !uploading; adding = false; error = ''; }}><Upload size={iconSizes.action}/>Upload PDF</button>
+            <button class="section-action primary" disabled={saving} aria-expanded={adding} onclick={() => { adding = !adding; uploading = false; error = ''; }}><Plus size={iconSizes.action}/>Add article</button>
         {/snippet}
     </SectionHeader>
 
@@ -522,7 +518,7 @@
         </div>
 
         <div class="reading-search">
-            <Search size={16} />
+            <Search size={iconSizes.action} />
             <input
                     bind:value={search}
                     aria-label="Search saved articles"
@@ -575,11 +571,11 @@
     {:else if filtered.length === 0}
         <div class="empty">
             {#if tab === 'archive'}
-                <Archive size={27} strokeWidth={1.3} />
+                <Archive size={iconSizes.empty} />
                 <p>No archived articles.</p>
                 <small>Articles you archive will appear here.</small>
             {:else}
-                <BookOpen size={27} strokeWidth={1.3} />
+                <featureIcons.reading size={iconSizes.empty} />
                 <p>{search ? 'No matching articles.' : 'Your queue is empty.'}</p>
                 <small>Save something interesting for later.</small>
             {/if}
@@ -596,9 +592,9 @@
                             onclick={() => toggleRead(article)}
                     >
                         {#if article.is_read}
-                            <CircleCheck size={21} />
+                            <CircleCheck size={iconSizes.status} />
                         {:else}
-                            <Circle size={21} />
+                            <Circle size={iconSizes.status} />
                         {/if}
                     </button>
 
@@ -623,7 +619,7 @@
                                         disabled={busyIds.includes(article.id)}
                                         title="Save title"
                                 >
-                                    <Check size={17} />
+                                    <Check size={iconSizes.action} />
                                 </button>
 
                                 <button
@@ -631,7 +627,7 @@
                                         onclick={() => editingId = null}
                                         title="Cancel editing"
                                 >
-                                    <X size={17} />
+                                    <X size={iconSizes.action} />
                                 </button>
                             </form>
                         {:else}
@@ -642,12 +638,12 @@
                                     rel="noopener noreferrer"
                             >
                                 {article.title}
-                                {#if article.source_kind !== 'upload'}<ArrowUpRight size={14} />{/if}
+                                {#if article.source_kind !== 'upload'}<ArrowUpRight size={iconSizes.inline} />{/if}
                             </a>
                         {/if}
 
                         <small>{article.source_kind === 'upload' ? `Uploaded PDF · ${article.upload_filename ?? 'Document'}` : hostname(article.url)}</small>
-                        {#if article.hn_discussion_url}<small><a href={article.hn_discussion_url} target="_blank" rel="noopener noreferrer">HN discussion ↗</a></small>{/if}
+                        {#if article.hn_discussion_url}<small><a href={article.hn_discussion_url} target="_blank" rel="noopener noreferrer">HN discussion <ArrowUpRight size={iconSizes.inline}/></a></small>{/if}
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
                                 <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : article.copy_format === 'html' && article.html_reading_progress && article.html_reading_progress.fraction > .02 && article.html_reading_progress.fraction < .98 ? `Continue · ${Math.round(article.html_reading_progress.fraction*100)}%` : 'Read saved copy'}</a>
@@ -682,15 +678,15 @@
                     <div class="article-actions">
                         <OverflowMenu label={`Actions for ${article.title}`}>
                             {#if article.copy_available}
-                                <a href={`/api/reading/${article.id}/copy/download`}><Download size={16}/>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
+                                <a href={`/api/reading/${article.id}/copy/download`}><Download size={iconSizes.action}/>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
                                 <p class="menu-note">{article.copy_is_legacy ? 'Recovered text copy' : 'Copy saved'}{article.copy_saved_at ? ` · ${new Date(article.copy_saved_at).toLocaleDateString()}` : ''}{article.copy_warning ? ` · ${article.copy_warning}` : ''}</p>
                             {/if}
-                            {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)||article.copy_status==='pending'||article.copy_status==='processing'} onclick={() => retryCopy(article)}><RefreshCw size={16}/>{article.copy_status==='failed' ? 'Retry saved copy' : 'Refresh saved copy'}</button>{/if}
+                            {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)||article.copy_status==='pending'||article.copy_status==='processing'} onclick={() => retryCopy(article)}><RefreshCw size={iconSizes.action}/>{article.copy_status==='failed' ? 'Retry saved copy' : 'Refresh saved copy'}</button>{/if}
                             {#if article.index_status === 'pending' || article.index_status === 'processing'}<p class="menu-note">Preparing content search…</p>{/if}
                             <hr/>
-                            <button disabled={busyIds.includes(article.id)} onclick={() => startEditing(article)}><Pencil size={16}/>Edit title</button>
-                            <button disabled={busyIds.includes(article.id)} onclick={() => toggleArchive(article)}>{#if tab === 'queue'}<Archive size={17}/>Archive{:else}<ArchiveRestore size={17}/>Restore{/if}</button>
-                            <button class="menu-danger" disabled={busyIds.includes(article.id)} onclick={() => remove(article)}><Trash2 size={17}/>Delete permanently</button>
+                            <button disabled={busyIds.includes(article.id)} onclick={() => startEditing(article)}><Pencil size={iconSizes.action}/>Edit title</button>
+                            <button disabled={busyIds.includes(article.id)} onclick={() => toggleArchive(article)}>{#if tab === 'queue'}<Archive size={iconSizes.action}/>Archive{:else}<ArchiveRestore size={iconSizes.action}/>Restore{/if}</button>
+                            <button class="menu-danger" disabled={busyIds.includes(article.id)} onclick={() => remove(article)}><Trash2 size={iconSizes.action}/>Delete permanently</button>
                         </OverflowMenu>
                     </div>
                 </div>

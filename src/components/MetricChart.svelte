@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { Activity } from '@lucide/svelte';
   import { buildPlot, formatAxisValue, formatValue, nearestPlotPoint, type ChartSeries } from '../lib/infrastructure';
 
@@ -78,7 +79,7 @@
     </div>
     <div class="chart-footer"><span class="legend-line"></span>Average <span class="legend-band"></span>Min / max <span class="chart-hint">Hover, tap, or use arrow keys to explore</span></div>
   {:else}
-    <div class="chart-empty"><Activity size={24} strokeWidth={1.4} /><span>{loading ? 'Loading history...' : series.length ? 'No readings in this time range.' : 'Select a metric to view its history.'}</span></div>
+    <div class="chart-empty"><Activity size={iconSizes.empty} /><span>{loading ? 'Loading history...' : series.length ? 'No readings in this time range.' : 'Select a metric to view its history.'}</span></div>
   {/if}
 </section>
 

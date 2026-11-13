@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { onMount } from 'svelte';
   import PDFReader from './PDFReader.svelte';
   import { ReadingProgress, type ProgressState } from '../lib/pdf-progress';
@@ -180,14 +181,14 @@
 </script>
 
 <section class="saved-article">
-  <a class="back" href="/" onclick={onback}><ArrowLeft size={15} />Back to reading list</a>
+  <a class="back" href="/" onclick={onback}><ArrowLeft size={iconSizes.action} />Back to reading list</a>
   <header><div class="eyebrow">YOUR SAVED COPY</div><h1>{info?.title ?? 'Saved article'}</h1>
     {#if info?.copy_available}<p>{info.source_kind === 'upload' ? 'Uploaded' : 'Captured'} {info.copy_saved_at ? new Date(info.copy_saved_at).toLocaleString() : ''} · {info.copy_format === 'pdf' ? 'Original PDF' : 'Readable HTML'}{info.copy_size ? ` · ${fileSize(info.copy_size)}` : ''}</p>{/if}
     {#if info}<div class="actions">
-      {#if info.copy_available}<a class="primary" href={`/api/reading/${articleId}/copy/download`}><Download size={15} />Download {info.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>{/if}
+      {#if info.copy_available}<a class="primary" href={`/api/reading/${articleId}/copy/download`}><Download size={iconSizes.action} />Download {info.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>{/if}
       {#if info.source_kind !== 'upload'}
-        <a href={info.url} target="_blank" rel="noopener noreferrer">Open original<ArrowUpRight size={14} /></a>
-        <button disabled={refreshing || pending} onclick={refreshCopy}><RefreshCw size={14} />{pending || refreshing ? 'Saving copy...' : info.copy_available ? 'Refresh saved copy' : 'Retry saved copy'}</button>
+        <a href={info.url} target="_blank" rel="noopener noreferrer">Open original<ArrowUpRight size={iconSizes.inline} /></a>
+        <button disabled={refreshing || pending} onclick={refreshCopy}><RefreshCw size={iconSizes.action} />{pending || refreshing ? 'Saving copy...' : info.copy_available ? 'Refresh saved copy' : 'Retry saved copy'}</button>
       {/if}
     </div>{/if}
     {#if info?.upload_filename}<p>{info.upload_filename}</p>{/if}
@@ -200,7 +201,7 @@
     {#if info.copy_format === 'pdf'}
       {#key info.copy_saved_at}<PDFReader {articleId} version={info.copy_saved_at ?? ''} url={contentUrl} />{/key}
     {:else}
-      <div class="article-progress" bind:this={progressToolbar} role="status"><a href="/" onclick={onback} aria-label="Back to reading list" class="progress-back"><ArrowLeft size={14}/>Back</a><span>{articleSync.ready?`${Math.round((articleSync.position?.fraction??0)*100)}% through`:'Loading reading position…'}<small>{articleSync.status==='saving'||articleSync.status==='pending'?'Saving position…':articleSync.status==='saved'?'Position saved':''}</small></span><button disabled={!articleSync.ready||articleSync.status==='conflict'} onclick={startArticleOver}>Start over</button></div>
+      <div class="article-progress" bind:this={progressToolbar} role="status"><a href="/" onclick={onback} aria-label="Back to reading list" class="progress-back"><ArrowLeft size={iconSizes.inline}/>Back</a><span>{articleSync.ready?`${Math.round((articleSync.position?.fraction??0)*100)}% through`:'Loading reading position…'}<small>{articleSync.status==='saving'||articleSync.status==='pending'?'Saving position…':articleSync.status==='saved'?'Position saved':''}</small></span><button disabled={!articleSync.ready||articleSync.status==='conflict'} onclick={startArticleOver}>Start over</button></div>
       {#if articleSync.message}<div class="progress-notice"><p>{articleSync.message}</p>{#if articleSync.status==='conflict'&&articleSync.ready}<button onclick={resumeSavedPosition}>Resume saved position</button><button onclick={()=>articleProgress?.keepCurrent(currentArticlePosition())}>Keep this position</button>{:else if articleSync.status==='conflict'}<button onclick={load}>Reload saved copy</button>{:else if articleSync.ready}<button onclick={()=>articleProgress?.flush()}>Retry saving position</button>{:else}<button onclick={resumeSavedPosition}>Retry loading position</button>{/if}</div>{/if}
       <iframe bind:this={frame} class="reader-frame" title="Saved article content" src={contentUrl} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload={articleFrameLoaded} style:height={`${frameHeight}px`}></iframe>
     {/if}

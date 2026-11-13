@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { ChevronDown, HardDrive } from '@lucide/svelte';
   import MetricChart from './MetricChart.svelte';
   import { ageLabel, convertTemperature, counterIncrease, decodeCriticalWarning, driveFields, driveHistoryMetrics, driveReading,
@@ -22,7 +23,7 @@
 
 <article class="drive-card" aria-label={drive.label}>
   <div class="drive-heading">
-    <div class="drive-name"><HardDrive size={17} strokeWidth={1.5} /><h3>{drive.label}</h3><span>{drive.kind}</span></div>
+    <div class="drive-name"><HardDrive size={iconSizes.action} /><h3>{drive.label}</h3><span>{drive.kind}</span></div>
     <span class="drive-status" class:passed={status.state === 'passed'} class:failed={status.state === 'failed'} class:attention={status.state === 'attention'}><i></i>{status.label}</span>
   </div>
   <div class="drive-readouts">
@@ -38,7 +39,7 @@
     <ul class="status-reasons" class:failed={status.state === 'failed'}>{#each status.reasons as reason}<li>{reason}</li>{/each}</ul>
   {/if}
   <details ontoggle={event => onOpen(event.currentTarget.open)}>
-    <summary aria-label={`Details for ${drive.label}`}><span>Health &amp; details</span><ChevronDown size={14} /></summary>
+    <summary aria-label={`Details for ${drive.label}`}><span>Health &amp; details</span><ChevronDown size={iconSizes.inline} /></summary>
     <dl>
       {#each fields as field (field.suffix)}
         {@const reading = driveReading(drive, field.suffix)}

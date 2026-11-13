@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import { onMount } from 'svelte';
   import SectionHeader from './SectionHeader.svelte';
-  import { ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, Plus, RefreshCw, Rss, Search, Settings2, Trash2, X } from '@lucide/svelte';
+  import { ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, Plus, RefreshCw, Search, Settings2, Trash2, X } from '@lucide/svelte';
   import { FeedReader, type ReaderState, type Discovery, type FeedPreview } from '../lib/feed-reader';
 
   let { active = true, previewCount = 3 }: { active?: boolean; previewCount?: number } = $props();
@@ -87,11 +88,11 @@
 
 <section class="feeds home-surface" aria-label="Feeds">
   <SectionHeader title="Feeds" count={`${readerState.data?.unread ?? 0} UNREAD`}>
-    {#snippet icon()}<Rss size={19} strokeWidth={1.7}/>{/snippet}
+    {#snippet icon()}<featureIcons.feeds size={iconSizes.section}/>{/snippet}
     {#snippet actions()}
-      <button class="section-icon-action" onclick={() => reader.refreshFeeds()} disabled={!subscriptions.length || readerState.busy.includes('refresh')} aria-label="Refresh feeds" title="Check feeds for new stories"><RefreshCw size={17}/></button>
-      <button class="section-icon-action" class:active={managing} onclick={() => managing = !managing} aria-label="Manage feeds" aria-expanded={managing} title="Manage subscriptions"><Settings2 size={17}/></button>
-      <button class="section-action primary" onclick={() => adding = !adding} aria-expanded={adding}><Plus size={16}/>Add feed</button>
+      <button class="section-icon-action" onclick={() => reader.refreshFeeds()} disabled={!subscriptions.length || readerState.busy.includes('refresh')} aria-label="Refresh feeds" title="Check feeds for new stories"><RefreshCw size={iconSizes.action}/></button>
+      <button class="section-icon-action" class:active={managing} onclick={() => managing = !managing} aria-label="Manage feeds" aria-expanded={managing} title="Manage subscriptions"><Settings2 size={iconSizes.action}/></button>
+      <button class="section-action primary" onclick={() => adding = !adding} aria-expanded={adding}><Plus size={iconSizes.action}/>Add feed</button>
     {/snippet}
   </SectionHeader>
 
@@ -101,7 +102,7 @@
       <button role="tab" class:active={view === 'all'} aria-selected={view === 'all'} onclick={() => view = 'all'}>All</button>
     </div>
     <select bind:value={selectedFeed} aria-label="Filter by feed"><option value="">All feeds</option>{#each subscriptions as feed}<option value={feed.id}>{feed.title} ({feed.unread})</option>{/each}</select>
-    <div class="feed-search"><Search size={16} /><input bind:value={search} maxlength="200" aria-label="Search feed entries" placeholder="Search stories..." /></div>
+    <div class="feed-search"><Search size={iconSizes.action} /><input bind:value={search} maxlength="200" aria-label="Search feed entries" placeholder="Search stories..." /></div>
     <button class="mark-all" disabled={!entries.length || readerState.busy.length > 0 || readerState.loading} onclick={() => reader.markAllRead()}>Mark all read</button>
   </div>
 
@@ -110,7 +111,7 @@
       <form onsubmit={event => { event.preventDefault(); void discover(); }}>
         <input bind:value={sourceUrl} required maxlength="2000" disabled={readerState.busy.includes('subscribe')} aria-label="Website or feed URL" placeholder="Paste a website or RSS/Atom feed URL..." oninput={resetDiscovery} />
         <button type="submit" disabled={discovering || readerState.busy.includes('subscribe')}>{discovering ? 'Finding feed...' : 'Find feed'}</button>
-        <button type="button" class="icon-action" onclick={() => adding = false} aria-label="Close add feed"><X size={17} /></button>
+        <button type="button" class="icon-action" onclick={() => adding = false} aria-label="Close add feed"><X size={iconSizes.action} /></button>
       </form>
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       {#if candidates.length}<div class="candidates"><p>Choose a feed to preview:</p>{#each candidates as candidate}<button disabled={discovering} onclick={() => discover(candidate.url)}>{candidate.title}<small>{candidate.url}</small></button>{/each}</div>{/if}
@@ -127,7 +128,7 @@
     <div class="subscriptions" aria-label="Subscriptions">
       {#each subscriptions as feed}
         <div class="subscription"><div><strong>{feed.title}</strong><details><summary>Feed details</summary><a href={feed.url} target="_blank" rel="noopener noreferrer">Open RSS/Atom feed</a><small>{feed.url}</small></details><small>{feed.refresh_pending ? 'Refresh pending · ' : ''}Last updated: {dateLabel(feed.last_success_at)}</small>{#if feed.error}<small class="error">{feed.error} Existing stories are kept; collection will retry.</small>{/if}</div>
-          <button class="icon-action" disabled={readerState.busy.includes(`unsubscribe:${feed.id}`)} onclick={() => unsubscribe(feed.id, feed.title)} aria-label={`Unsubscribe from ${feed.title}`} title="Unsubscribe"><Trash2 size={17} /></button>
+          <button class="icon-action" disabled={readerState.busy.includes(`unsubscribe:${feed.id}`)} onclick={() => unsubscribe(feed.id, feed.title)} aria-label={`Unsubscribe from ${feed.title}`} title="Unsubscribe"><Trash2 size={iconSizes.action} /></button>
         </div>
       {:else}<p class="status">No subscriptions yet. Add a feed to get started.</p>{/each}
       <p class="retention">Feeds are checked every 15 minutes. Entries are kept for 90 days; saved reading-list articles stay independently.</p>
@@ -138,21 +139,21 @@
   {#if readerState.notice}<p class="status" role="status">{readerState.notice}</p>{/if}
 
   {#if !readerState.data}
-    <div class="empty"><Rss size={27} strokeWidth={1.3} /><p>{readerState.loading ? 'Loading your feeds...' : 'Feeds could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh()}>Try again</button>{/if}</div>
+    <div class="empty"><featureIcons.feeds size={iconSizes.empty} /><p>{readerState.loading ? 'Loading your feeds...' : 'Feeds could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh()}>Try again</button>{/if}</div>
   {:else if !subscriptions.length}
-    <div class="empty"><Rss size={27} strokeWidth={1.3} /><p>Your sources, in one place.</p><small>Add a website or feed URL to start collecting stories.</small></div>
+    <div class="empty"><featureIcons.feeds size={iconSizes.empty} /><p>Your sources, in one place.</p><small>Add a website or feed URL to start collecting stories.</small></div>
   {:else if !entries.length}
-    <div class="empty"><CircleCheck size={27} strokeWidth={1.3} /><p>{search.trim() ? 'No matching stories.' : view === 'unread' ? 'You’re caught up.' : 'No stories collected yet.'}</p><small>{view === 'unread' && !search.trim() ? 'Switch to All to browse stories you’ve read.' : 'New entries appear here after feeds update.'}</small></div>
+    <div class="empty"><CircleCheck size={iconSizes.empty} /><p>{search.trim() ? 'No matching stories.' : view === 'unread' ? 'You’re caught up.' : 'No stories collected yet.'}</p><small>{view === 'unread' && !search.trim() ? 'Switch to All to browse stories you’ve read.' : 'New entries appear here after feeds update.'}</small></div>
   {:else}
     <div class="entry-list" aria-busy={readerState.loading}>
       {#each visible as entry (entry.id)}
         <article class="entry" class:read={entry.is_read}>
-          <button class="icon-action read-toggle" aria-label={`${entry.is_read ? 'Mark unread' : 'Mark read'}: ${entry.title}`} title={entry.is_read ? 'Mark unread' : 'Mark read'} disabled={readerState.busy.includes(`read:${entry.id}`) || readerState.busy.includes('read-all')} onclick={() => reader.setRead(entry, !entry.is_read)}>{#if entry.is_read}<CircleCheck size={21} />{:else}<Circle size={21} />{/if}</button>
-          <div class="entry-info"><a href={entry.url} target="_blank" rel="noopener noreferrer" onclick={() => { if (!entry.is_read) void reader.setRead(entry, true); }}>{entry.title}<ArrowUpRight size={14} /></a>
+          <button class="icon-action read-toggle" aria-label={`${entry.is_read ? 'Mark unread' : 'Mark read'}: ${entry.title}`} title={entry.is_read ? 'Mark unread' : 'Mark read'} disabled={readerState.busy.includes(`read:${entry.id}`) || readerState.busy.includes('read-all')} onclick={() => reader.setRead(entry, !entry.is_read)}>{#if entry.is_read}<CircleCheck size={iconSizes.status} />{:else}<Circle size={iconSizes.status} />{/if}</button>
+          <div class="entry-info"><a href={entry.url} target="_blank" rel="noopener noreferrer" onclick={() => { if (!entry.is_read) void reader.setRead(entry, true); }}>{entry.title}<ArrowUpRight size={iconSizes.inline} /></a>
             <small>{entry.feed_title} · {dateLabel(entry.published_at ?? entry.first_seen_at)}{entry.published_at ? '' : ' · collected'}</small>
             {#if entry.summary}<p>{entry.summary}</p>{/if}
           </div>
-          <button class="save-entry" class:saved={entry.is_saved} disabled={entry.is_saved || readerState.busy.includes(`save:${entry.id}`)} aria-label={`${entry.is_saved ? 'Saved to reading list' : 'Save to reading list'}: ${entry.title}`} title={entry.is_saved ? 'Already in your reading list' : 'Save to reading list'} onclick={() => reader.save(entry)}>{#if entry.is_saved}<Check size={16} /><span>Saved</span>{:else}<BookmarkPlus size={17} /><span>{readerState.busy.includes(`save:${entry.id}`) ? 'Saving...' : 'Save'}</span>{/if}</button>
+          <button class="save-entry" class:saved={entry.is_saved} disabled={entry.is_saved || readerState.busy.includes(`save:${entry.id}`)} aria-label={`${entry.is_saved ? 'Saved to reading list' : 'Save to reading list'}: ${entry.title}`} title={entry.is_saved ? 'Already in your reading list' : 'Save to reading list'} onclick={() => reader.save(entry)}>{#if entry.is_saved}<Check size={iconSizes.action} /><span>Saved</span>{:else}<BookmarkPlus size={iconSizes.action} /><span>{readerState.busy.includes(`save:${entry.id}`) ? 'Saving...' : 'Save'}</span>{/if}</button>
         </article>
       {/each}
     </div>

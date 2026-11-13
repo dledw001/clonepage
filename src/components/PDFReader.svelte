@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { onMount } from 'svelte';
   import { ChevronLeft, ChevronRight, Minus, Plus, RotateCcw } from '@lucide/svelte';
   import { PDFProgress, type PDFPosition, type ProgressState } from '../lib/pdf-progress';
@@ -175,17 +176,17 @@
 <div class="pdf-reader" aria-label="PDF reader">
   <div class="toolbar" role="group" aria-label="PDF controls">
     <div class="page-controls">
-      <button onclick={() => goTo(page - 1)} disabled={!ready || changingLayout || page <= 1} aria-label="Previous PDF page"><ChevronLeft size={18} /></button>
+      <button onclick={() => goTo(page - 1)} disabled={!ready || changingLayout || page <= 1} aria-label="Previous PDF page"><ChevronLeft size={iconSizes.action} /></button>
       <form onsubmit={event => { event.preventDefault(); goTo(Number(pageInput)); }}>
         <label>Page <input aria-label="PDF page number" type="number" min="1" max={pageCount || 1} bind:value={pageInput} disabled={!ready || changingLayout} /></label><span>of {pageCount || '…'}</span>
       </form>
-      <button onclick={() => goTo(page + 1)} disabled={!ready || changingLayout || page >= pageCount} aria-label="Next PDF page"><ChevronRight size={18} /></button>
+      <button onclick={() => goTo(page + 1)} disabled={!ready || changingLayout || page >= pageCount} aria-label="Next PDF page"><ChevronRight size={iconSizes.action} /></button>
     </div>
     <div class="zoom-controls">
-      <button onclick={() => zoom(-1)} disabled={!ready || changingLayout} aria-label="Zoom out PDF"><Minus size={16} /></button>
+      <button onclick={() => zoom(-1)} disabled={!ready || changingLayout} aria-label="Zoom out PDF"><Minus size={iconSizes.action} /></button>
       <button class="fit" onclick={fitWidth} disabled={!ready || changingLayout}>Fit width</button>
-      <button onclick={() => zoom(1)} disabled={!ready || changingLayout} aria-label="Zoom in PDF"><Plus size={16} /></button>
-      <button class="restart" onclick={startOver} disabled={!ready || changingLayout || !sync.ready || sync.status === 'conflict'} title="Clear saved reading position"><RotateCcw size={14} />Start over</button>
+      <button onclick={() => zoom(1)} disabled={!ready || changingLayout} aria-label="Zoom in PDF"><Plus size={iconSizes.action} /></button>
+      <button class="restart" onclick={startOver} disabled={!ready || changingLayout || !sync.ready || sync.status === 'conflict'} title="Clear saved reading position"><RotateCcw size={iconSizes.inline} />Start over</button>
     </div>
   </div>
   <div class="status" aria-live="polite">

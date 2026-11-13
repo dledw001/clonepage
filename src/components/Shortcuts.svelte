@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
-  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, LayoutGrid, Pencil, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
   import { AvailabilityStore, availabilityStatus, emptyAvailability } from '../lib/availability';
   import SectionHeader from './SectionHeader.svelte';
@@ -249,8 +250,8 @@
 
 {#snippet card(item: Shortcut)}
   {@const Icon = shortcutIcon(item.icon)}
-  <span class="shortcut-icon"><Icon size={21} strokeWidth={1.65} /></span>
-  <span class="shortcut-bottom"><span class="shortcut-name">{item.name}</span>{#if item.action === 'copy'}<Copy size={14} class="shortcut-arrow" />{:else}<ArrowUpRight size={14} class="shortcut-arrow" />{/if}</span>
+  <span class="shortcut-icon"><Icon size={iconSizes.shortcut} /></span>
+  <span class="shortcut-bottom"><span class="shortcut-name">{item.name}</span>{#if item.action === 'copy'}<Copy size={iconSizes.inline} class="shortcut-arrow" />{:else}<ArrowUpRight size={iconSizes.inline} class="shortcut-arrow" />{/if}</span>
 {/snippet}
 
 {#snippet cards()}
@@ -268,9 +269,9 @@
           {#if group.name || groups.length > 1 || managing}
             <div class="group-heading"><h3>{group.name || 'Ungrouped'}</h3><span>{group.items.length}</span>
               {#if managing}<div class="group-actions">
-                <button class="small-icon" disabled={groupIndex === 0 || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move group ${group.name || 'Ungrouped'} up`} onclick={() => store.moveGroup(group.name, -1)}><ArrowUp size={14} /></button>
-                <button class="small-icon" disabled={groupIndex === groups.length - 1 || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move group ${group.name || 'Ungrouped'} down`} onclick={() => store.moveGroup(group.name, 1)}><ArrowDown size={14} /></button>
-                {#if group.name}<button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Rename group ${group.name}`} onclick={() => editGroup(group.name)}><Pencil size={14} /></button>{/if}
+                <button class="small-icon" disabled={groupIndex === 0 || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move group ${group.name || 'Ungrouped'} up`} onclick={() => store.moveGroup(group.name, -1)}><ArrowUp size={iconSizes.action} /></button>
+                <button class="small-icon" disabled={groupIndex === groups.length - 1 || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move group ${group.name || 'Ungrouped'} down`} onclick={() => store.moveGroup(group.name, 1)}><ArrowDown size={iconSizes.action} /></button>
+                {#if group.name}<button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Rename group ${group.name}`} onclick={() => editGroup(group.name)}><Pencil size={iconSizes.inline} /></button>{/if}
               </div>{/if}
             </div>
           {/if}
@@ -281,7 +282,7 @@
                   class:drop-before={drag?.active && drag.group === group.name && drag.slot === index} class:drop-after={drag?.active && drag.group === group.name && drag.slot === group.items.length && index === group.items.length - 1}>
                   {@render card(item)}
                   <button class="drag-handle" aria-label={`Drag to reorder ${item.name}`} title="Drag to reorder within this group; arrow keys also move this shortcut" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null}
-                    onpointerdown={event => startDrag(event, item)} onlostpointercapture={cancelPointer} onkeydown={event => handleKey(event, item)} onclick={event => event.preventDefault()}><GripVertical size={19} /></button>
+                    onpointerdown={event => startDrag(event, item)} onlostpointercapture={cancelPointer} onkeydown={event => handleKey(event, item)} onclick={event => event.preventDefault()}><GripVertical size={iconSizes.action} /></button>
                 </article>
               {:else}
                 {@const status = monitorSummary(item.monitor, monitorData, Boolean(monitorError))}
@@ -292,7 +293,7 @@
                   {#if serviceStatus}<button class="availability-indicator" class:reachable={serviceStatus.state === 'reachable'} class:unreachable={serviceStatus.state === 'unreachable'} class:http-error={serviceStatus.state === 'http_error'}
                     title={serviceStatus.title} aria-label={`Availability for ${item.name}: ${serviceStatus.label}`} aria-expanded={availabilitySelection === item.id}
                     onclick={event => showAvailability(item.id, event.currentTarget)}>
-                    <span>{#if serviceStatus.state === 'reachable'}<Check size={11} />{:else if serviceStatus.state === 'unreachable'}<X size={11} />{:else if serviceStatus.state === 'http_error'}<TriangleAlert size={11} />{:else}<CircleHelp size={12} />{/if}</span>
+                    <span>{#if serviceStatus.state === 'reachable'}<Check size={iconSizes.inline} />{:else if serviceStatus.state === 'unreachable'}<X size={iconSizes.action} />{:else if serviceStatus.state === 'http_error'}<TriangleAlert size={iconSizes.inline} />{:else}<CircleHelp size={iconSizes.inline} />{/if}</span>
                   </button>{/if}
                   {#if status && status.state !== 'current' && (monitorData || monitorError)}<a class="monitor-badge" class:unknown={status.state === 'unknown'} href={status.href} title={status.detail} aria-label={`View ${item.name} container updates: ${status.detail}`} onclick={event => onmonitor?.(event, status.href)}>{status.label}</a>{/if}
                 </div>
@@ -307,8 +308,8 @@
 
 <section class="shortcuts home-surface" aria-label="Your places">
   <SectionHeader title="Your places" count={`${data.loaded ? data.items.length : '—'} SHORTCUTS`}>
-    {#snippet icon()}<LayoutGrid size={19} strokeWidth={1.7}/>{/snippet}
-    {#snippet actions()}<button class="section-action" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={16}/>{managing ? 'Done' : 'Manage shortcuts'}</button>{/snippet}
+    {#snippet icon()}<featureIcons.shortcuts size={iconSizes.section}/>{/snippet}
+    {#snippet actions()}<button class="section-action" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={iconSizes.action}/>{managing ? 'Done' : 'Manage shortcuts'}</button>{/snippet}
   </SectionHeader>
 
   {#if data.error && !editorOpen}<p class="shortcut-error" role="alert">{data.error}<button onclick={() => store.refresh()} disabled={data.loading || data.busy}>Try again</button></p>{/if}
@@ -319,19 +320,19 @@
       <div><strong>{selectedService.name} · {selectedAvailability.label}</strong><p>{selectedAvailability.detail}</p>
         <small>Checked from the Clonepage server: {selectedAvailability.checkedAt}<br />Last reachable: {selectedAvailability.lastSuccess}</small>
         <p class="availability-note">Website response only; this does not check every application feature or your device’s connection.</p></div>
-      <div class="availability-actions"><button disabled={availabilityData.loading} onclick={() => availabilityStore.refresh()}>Refresh status</button><button aria-label="Close availability details" onclick={closeAvailability}><X size={15} /></button></div>
+      <div class="availability-actions"><button disabled={availabilityData.loading} onclick={() => availabilityStore.refresh()}>Refresh status</button><button aria-label="Close availability details" onclick={closeAvailability}><X size={iconSizes.action} /></button></div>
     </div>
   {/if}
 
   {#if managing && data.loaded}
     <div class="shortcut-manager">
       <div class="manager-heading"><div><h2>Your shortcuts</h2><p>Drag cards within a group, or use the group arrows to arrange sections. Changes save across your devices.</p></div>
-        <div class="manager-add-actions"><button class="editor-primary" onclick={() => serviceOpen = true} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Plus size={15} />Add service</button><button bind:this={addButton} class="editor-primary" onclick={() => edit()} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Plus size={15} />Add shortcut</button></div>
+        <div class="manager-add-actions"><button class="editor-primary" onclick={() => serviceOpen = true} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Plus size={iconSizes.action} />Add service</button><button bind:this={addButton} class="editor-primary" onclick={() => edit()} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Plus size={iconSizes.action} />Add shortcut</button></div>
       </div>
       {#if serviceOpen}<ServiceSetup onclose={() => serviceOpen = false} onsaved={snapshot => store.accept(snapshot)} />{/if}
       {#if editorOpen}
         <form class="shortcut-editor" onsubmit={save}>
-          <div class="editor-heading"><h3>{editingId ? 'Edit shortcut' : 'New shortcut'}</h3><button type="button" class="small-icon" aria-label="Close shortcut editor" onclick={closeEditor} disabled={data.busy}><X size={18} /></button></div>
+          <div class="editor-heading"><h3>{editingId ? 'Edit shortcut' : 'New shortcut'}</h3><button type="button" class="small-icon" aria-label="Close shortcut editor" onclick={closeEditor} disabled={data.busy}><X size={iconSizes.action} /></button></div>
           <fieldset disabled={data.busy}>
             <div class="editor-fields">
               <label>Name<input bind:this={nameInput} bind:value={draft.name} required maxlength="80" placeholder="qBittorrent" /></label>
@@ -359,16 +360,16 @@
             <div class="appearance">
               <div class="appearance-settings"><label>Find an icon<input bind:value={iconSearch} type="search" aria-label="Search shortcut icons" placeholder="Search icons..." /></label>
                 <div class="icon-picker" role="group" aria-label="Shortcut icon">
-                  {#each icons as icon (icon.key)}{@const Icon = shortcutIcon(icon.key)}<button type="button" class:selected={draft.icon === icon.key} aria-pressed={draft.icon === icon.key} aria-label={icon.label} title={icon.label} onclick={() => draft.icon = icon.key}><Icon size={21} />{#if draft.icon === icon.key}<Check size={10} class="selected-check" />{/if}</button>{/each}
+                  {#each icons as icon (icon.key)}{@const Icon = shortcutIcon(icon.key)}<button type="button" class:selected={draft.icon === icon.key} aria-pressed={draft.icon === icon.key} aria-label={icon.label} title={icon.label} onclick={() => draft.icon = icon.key}><Icon size={iconSizes.shortcut} />{#if draft.icon === icon.key}<Check size={iconSizes.inline} class="selected-check" />{/if}</button>{/each}
                   {#if !icons.length}<p>No matching icons.</p>{/if}
                 </div>
                 <div class="color-label">Color</div><div class="color-picker" role="group" aria-label="Shortcut color">
-                  {#each shortcutCatalog.colors as color}<button type="button" style:background={color} aria-label={`Use color ${color}`} aria-pressed={draft.color === color} class:selected={draft.color === color} onclick={() => draft.color = color}>{#if draft.color === color}<Check size={13} />{/if}</button>{/each}
+                  {#each shortcutCatalog.colors as color}<button type="button" style:background={color} aria-label={`Use color ${color}`} aria-pressed={draft.color === color} class:selected={draft.color === color} onclick={() => draft.color = color}>{#if draft.color === color}<Check size={iconSizes.inline} />{/if}</button>{/each}
                   <label class="custom-color">Custom<input type="color" bind:value={draft.color} aria-label="Custom shortcut color" /></label>
                 </div>
               </div>
               <div class="preview"><span class="preview-label">CARD PREVIEW</span>
-                <div class="shortcut-card" style={`--accent:${draft.color}`}><span class="shortcut-icon"><PreviewIcon size={21} strokeWidth={1.65} /></span><span class="shortcut-bottom"><span class="shortcut-name">{draft.name || 'Your shortcut'}</span>{#if draft.action === 'copy'}<Copy size={14} class="shortcut-arrow" />{:else}<ArrowUpRight size={14} class="shortcut-arrow" />{/if}</span></div>
+                <div class="shortcut-card" style={`--accent:${draft.color}`}><span class="shortcut-icon"><PreviewIcon size={iconSizes.shortcut} /></span><span class="shortcut-bottom"><span class="shortcut-name">{draft.name || 'Your shortcut'}</span>{#if draft.action === 'copy'}<Copy size={iconSizes.inline} class="shortcut-arrow" />{:else}<ArrowUpRight size={iconSizes.inline} class="shortcut-arrow" />{/if}</span></div>
                 <p>{draft.description || (draft.action === 'copy' ? 'Copies text to your clipboard' : 'Opens in a new tab')}</p>
               </div>
             </div>
@@ -380,9 +381,9 @@
       {@render cards()}
       <div class="managed-list" aria-label="Shortcut order">
         {#each arrangedItems as item (item.id)}{@const Icon = shortcutIcon(item.icon)}
-          <div class="managed-row"><span class="managed-icon" style:color={item.color}><Icon size={19} /></span><div class="managed-name"><strong>{item.name}</strong><small>{item.group ? `${item.group} · ` : ''}{item.description || (item.action === 'copy' ? 'Copy text' : item.value)}</small></div>
-            <div class="row-actions"><button class="small-icon" disabled={!canMove(item, -1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={15} /></button><button class="small-icon" disabled={!canMove(item, 1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={15} /></button>
-              <button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={15} /></button><button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={15} /></button></div>
+          <div class="managed-row"><span class="managed-icon" style:color={item.color}><Icon size={iconSizes.shortcut} /></span><div class="managed-name"><strong>{item.name}</strong><small>{item.group ? `${item.group} · ` : ''}{item.description || (item.action === 'copy' ? 'Copy text' : item.value)}</small></div>
+            <div class="row-actions"><button class="small-icon" disabled={!canMove(item, -1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={iconSizes.action} /></button><button class="small-icon" disabled={!canMove(item, 1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={iconSizes.action} /></button>
+              <button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={iconSizes.action} /></button><button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={iconSizes.action} /></button></div>
           </div>
           {#if deleting === item.id}<div class="delete-confirm" role="group" aria-label={`Confirm deleting ${item.name}`}><span>Delete “{item.name}”?</span><button disabled={data.busy} onclick={() => deleting = null}>Keep shortcut</button><button class="delete-button" disabled={data.busy} onclick={() => remove(item.id)}>Delete shortcut</button></div>{/if}
         {/each}

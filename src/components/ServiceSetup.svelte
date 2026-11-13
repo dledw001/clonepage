@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { iconSizes } from '../lib/icons';
   import { onMount, tick } from 'svelte';
-  import { Check, Link, LockKeyhole, LogOut, Plus, Search, Server, X } from '@lucide/svelte';
+  import { ArrowUpRight, Check, LockKeyhole, LogOut, Plus, Search, Server, X } from '@lucide/svelte';
   import { DSMServiceClient, type DSMState, type ServiceDraft } from '../lib/dsm-services';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
   import type { ShortcutSnapshot } from '../lib/shortcuts';
@@ -52,17 +53,17 @@
 </script>
 
 <section class="service-setup" aria-label="Add service">
-  <header><div><h3><Server size={17} />Add a service</h3><p>Create its HTTPS address and shortcut together.</p></div><button class="icon-button" aria-label="Close service setup" disabled={view.busy} onclick={close}><X size={18} /></button></header>
+  <header><div><h3><Server size={iconSizes.action} />Add a service</h3><p>Create its HTTPS address and shortcut together.</p></div><button class="icon-button" aria-label="Close service setup" disabled={view.busy} onclick={close}><X size={iconSizes.action} /></button></header>
   {#if view.error}<p bind:this={errorMessage} class="error" role="alert" tabindex="-1">{view.error}</p>{/if}
   {#if view.result?.ok}
-    <div bind:this={resultPanel} class="success" role="status" tabindex="-1"><Check size={22} /><div><strong>Your service is ready.</strong><a href={view.result.url} target="_blank" rel="noopener noreferrer">{view.result.url}</a><p>The shortcut has been added. Your DSM connection has been closed.</p></div></div>
+    <div bind:this={resultPanel} class="success" role="status" tabindex="-1"><Check size={iconSizes.status} /><div><strong>Your service is ready.</strong><a href={view.result.url} target="_blank" rel="noopener noreferrer">{view.result.url}</a><p>The shortcut has been added. Your DSM connection has been closed.</p></div></div>
     <button class="primary" onclick={onclose}>Done</button>
   {:else}
     {#if view.result}<p class="resume-note">{stageLabel}. Your form is kept. Connect again and review it to resume the same setup.</p>{/if}
     {#if !view.connection}<p class="help">{view.error ? 'The connection settings could not be loaded.' : 'Checking the secure connection settings...'}</p>{#if view.error}<button class="primary" disabled={view.busy} onclick={() => client.refresh()}>Try again</button>{/if}{/if}
     {#if view.connection && !view.connection.connected}
       <form class="connect-form" onsubmit={connect} autocomplete="off">
-        <div class="connection-title"><LockKeyhole size={16} /><strong>Connect to DSM</strong><span>{view.connection.dsm_url}</span></div>
+        <div class="connection-title"><LockKeyhole size={iconSizes.action} /><strong>Connect to DSM</strong><span>{view.connection.dsm_url}</span></div>
         <p class="help">Your password and authenticator code are used for this sign-in only. The temporary connection closes after setup or five idle minutes.</p>
         <fieldset disabled={view.busy}>
           <div class="login-fields"><label>DSM username<input bind:value={username} required maxlength="128" autocomplete="off" /></label><label>DSM password<input type="password" bind:value={password} required maxlength="1024" autocomplete="off" /></label><label>Authenticator code <small>if enabled</small><input bind:value={otp} maxlength="16" inputmode="numeric" autocomplete="one-time-code" /></label></div>
@@ -70,7 +71,7 @@
         </fieldset>
       </form>
     {:else if view.connection?.connected}
-      <div class="connected"><span><LockKeyhole size={14} />Connected temporarily to DSM</span><button disabled={view.busy} onclick={() => client.disconnect()}><LogOut size={14} />Disconnect</button></div>
+      <div class="connected"><span><LockKeyhole size={iconSizes.inline} />Connected temporarily to DSM</span><button disabled={view.busy} onclick={() => client.disconnect()}><LogOut size={iconSizes.inline} />Disconnect</button></div>
     {/if}
 
     {#if view.connection?.connected && view.options}
@@ -79,7 +80,7 @@
       {:else if view.preview}
         <div class="review"><h4 bind:this={reviewHeading} tabindex="-1">Review your service</h4><dl><dt>Name</dt><dd>{view.preview.name}</dd><dt>HTTPS address</dt><dd>{view.preview.url}</dd><dt>Destination</dt><dd>{view.preview.upstream}</dd><dt>Settings copied from</dt><dd>{view.preview.template}</dd><dt>Certificate</dt><dd>{view.options.certificates.find(cert => cert.id === draft.certificate_id)?.name}</dd><dt>Access control</dt><dd>Copied exactly from the selected DSM rule</dd></dl>
           <p class="help">{view.preview.resuming ? 'This resumes the earlier setup without creating a duplicate rule.' : 'This creates one new reverse-proxy rule. Existing rules are kept.'} The shortcut is saved after HTTPS verification, then the DSM connection closes.</p>
-          <div class="form-actions"><button disabled={view.busy} onclick={() => client.clearPreview()}>Back to edit</button><button class="primary" disabled={view.busy} onclick={create}><Plus size={14} />{view.busy ? 'Setting up service...' : view.preview.resuming ? 'Resume setup' : 'Create service'}</button></div>
+          <div class="form-actions"><button disabled={view.busy} onclick={() => client.clearPreview()}>Back to edit</button><button class="primary" disabled={view.busy} onclick={create}><Plus size={iconSizes.action} />{view.busy ? 'Setting up service...' : view.preview.resuming ? 'Resume setup' : 'Create service'}</button></div>
         </div>
       {:else}
         <form class="service-form" onsubmit={review}>
@@ -91,9 +92,9 @@
               <label>Wildcard certificate<select bind:value={draft.certificate_id} required><option value="" disabled>Choose a certificate</option>{#each view.options.certificates as cert}<option value={cert.id}>{cert.name}</option>{/each}</select></label>
               <label class="wide">Search aliases<input bind:value={aliases} maxlength="1600" placeholder="sonarr, tv, series" /></label>
             </div>
-            <div class="appearance"><div><label>Find an icon<div class="icon-search"><Search size={14} /><input bind:value={iconSearch} aria-label="Search service icons" placeholder="Search icons..." /></div></label><div class="icons" role="group" aria-label="Service icon">{#each icons as icon}{@const Icon = shortcutIcon(icon.key)}<button type="button" title={icon.label} aria-label={icon.label} aria-pressed={draft.icon === icon.key} class:selected={draft.icon === icon.key} onclick={() => draft.icon = icon.key}><Icon size={20} /></button>{/each}</div>
-              <div class="colors" role="group" aria-label="Service color">{#each shortcutCatalog.colors as color}<button type="button" style:background={color} aria-label={`Use service color ${color}`} aria-pressed={draft.color === color} onclick={() => draft.color = color}>{#if draft.color === color}<Check size={12} />{/if}</button>{/each}<label>Custom<input type="color" bind:value={draft.color} aria-label="Custom service color" /></label></div>
-            </div><div class="preview"><span>CARD PREVIEW</span><div class="shortcut-card" style={`--accent:${draft.color}`}><span class="shortcut-icon"><PreviewIcon size={21} /></span><span class="shortcut-bottom"><span class="shortcut-name">{draft.name || 'Your service'}</span><Link size={13} /></span></div></div></div>
+            <div class="appearance"><div><label>Find an icon<div class="icon-search"><Search size={iconSizes.inline} /><input bind:value={iconSearch} aria-label="Search service icons" placeholder="Search icons..." /></div></label><div class="icons" role="group" aria-label="Service icon">{#each icons as icon}{@const Icon = shortcutIcon(icon.key)}<button type="button" title={icon.label} aria-label={icon.label} aria-pressed={draft.icon === icon.key} class:selected={draft.icon === icon.key} onclick={() => draft.icon = icon.key}><Icon size={iconSizes.shortcut} /></button>{/each}</div>
+              <div class="colors" role="group" aria-label="Service color">{#each shortcutCatalog.colors as color}<button type="button" style:background={color} aria-label={`Use service color ${color}`} aria-pressed={draft.color === color} onclick={() => draft.color = color}>{#if draft.color === color}<Check size={iconSizes.inline} />{/if}</button>{/each}<label>Custom<input type="color" bind:value={draft.color} aria-label="Custom service color" /></label></div>
+            </div><div class="preview"><span>CARD PREVIEW</span><div class="shortcut-card" style={`--accent:${draft.color}`}><span class="shortcut-icon"><PreviewIcon size={iconSizes.shortcut} /></span><span class="shortcut-bottom"><span class="shortcut-name">{draft.name || 'Your service'}</span><ArrowUpRight size={iconSizes.inline} /></span></div></div></div>
             <div class="form-actions"><button class="primary" type="submit">{view.busy ? 'Checking service...' : 'Review service'}</button></div>
           </fieldset>
         </form>

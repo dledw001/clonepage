@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { featureIcons, iconSizes } from '../lib/icons';
   import SectionHeader from './SectionHeader.svelte';
   import { onMount, untrack } from 'svelte';
-  import { ArrowRight, ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, MessageSquare, Newspaper, RefreshCw } from '@lucide/svelte';
+  import { ArrowRight, ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, MessageSquare, RefreshCw } from '@lucide/svelte';
   import { HackerNewsReader, storyAge, storyDomain, type HNState, type HNScope } from '../lib/hacker-news';
 
   let { preview = false, active = true, previewCount = 3, previewScope = {view:'top',window:'24h'}, onnavigate }: {
@@ -51,16 +52,16 @@
 <section class="hn-reader" class:home-surface={preview} class:preview aria-label="Hacker News">
   {#if preview}
     <SectionHeader title="Hacker News" subtitle={`${readerState.scope.view==='front'?'Front page':readerState.scope.view==='top'?'Top stories':'Most discussed'}${readerState.scope.view!=='front'?` · past ${readerState.scope.window==='24h'?'24 hours':readerState.scope.window==='7d'?'7 days':'30 days'}`:''}`}>
-      {#snippet icon()}<Newspaper size={19} strokeWidth={1.7}/>{/snippet}
+      {#snippet icon()}<featureIcons.hackerNews size={iconSizes.section}/>{/snippet}
       {#snippet actions()}
-        <button class="section-icon-action" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={17} class={readerState.loading ? 'spinning' : ''}/></button>
-        <a class="section-action" href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Open reader<ArrowRight size={15}/></a>
+        <button class="section-icon-action" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={iconSizes.action} class={readerState.loading ? 'spinning' : ''}/></button>
+        <a class="section-action" href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Open reader<ArrowRight size={iconSizes.action}/></a>
       {/snippet}
     </SectionHeader>
   {:else}
     <header>
-      <div class="heading"><span class="hn-mark" aria-hidden="true">Y</span><div><div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1></div></div>
-      <div class="header-actions"><button class="icon-button" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={17} class={readerState.loading ? 'spinning' : ''}/></button></div>
+      <div class="heading"><span class="page-symbol" aria-hidden="true"><featureIcons.hackerNews size={iconSizes.page}/></span><div><div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1></div></div>
+      <div class="header-actions"><button class="icon-button" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={iconSizes.action} class={readerState.loading ? 'spinning' : ''}/></button></div>
     </header>
   {/if}
 
@@ -86,25 +87,25 @@
   {#if notice}<p class="notice" role="status">{notice}</p>{/if}
   {#if readerState.notice}<p class="status" role="status">{readerState.notice}</p>{/if}
   {#if !readerState.data}
-    <div class="empty"><MessageSquare size={26} strokeWidth={1.3} /><p>{readerState.loading ? 'Finding stories worth your time…' : 'Hacker News could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh(true)}>Try again</button>{/if}</div>
+    <div class="empty"><featureIcons.hackerNews size={iconSizes.empty} /><p>{readerState.loading ? 'Finding stories worth your time…' : 'Hacker News could not be loaded.'}</p>{#if !readerState.loading}<button onclick={() => reader.refresh(true)}>Try again</button>{/if}</div>
   {:else if !stories.length}
-    <div class="empty"><CircleCheck size={26} strokeWidth={1.3} /><p>{hideRead ? 'You’re caught up on this list.' : 'No stories found in this view.'}</p>{#if hideRead}<button onclick={() => hideRead = false}>Show read stories</button>{/if}</div>
+    <div class="empty"><CircleCheck size={iconSizes.empty} /><p>{hideRead ? 'You’re caught up on this list.' : 'No stories found in this view.'}</p>{#if hideRead}<button onclick={() => hideRead = false}>Show read stories</button>{/if}</div>
   {:else}
     <div class="story-list" aria-busy={readerState.loading}>
       {#each visible as story, index (story.id)}
         <article class:read={story.is_read}>
-          <button class="read-toggle icon-button" disabled={readerState.busy.includes(`read:${story.id}`)} aria-label={`${story.is_read ? 'Mark unread' : 'Mark read'}: ${story.title}`} title={story.is_read ? 'Mark unread' : 'Mark read'} onclick={() => reader.setRead(story, !story.is_read)}>{#if story.is_read}<CircleCheck size={20} />{:else}<Circle size={20} />{/if}</button>
+          <button class="read-toggle icon-button" disabled={readerState.busy.includes(`read:${story.id}`)} aria-label={`${story.is_read ? 'Mark unread' : 'Mark read'}: ${story.title}`} title={story.is_read ? 'Mark unread' : 'Mark read'} onclick={() => reader.setRead(story, !story.is_read)}>{#if story.is_read}<CircleCheck size={iconSizes.status} />{:else}<Circle size={iconSizes.status} />{/if}</button>
           <div class="story-info">
-            <div class="story-title"><span class="position" aria-hidden="true">{index + 1}.</span><a href={story.url} target="_blank" rel="noopener noreferrer" onclick={() => { if (!story.is_read) void reader.setRead(story, true); }}>{story.title}<ArrowUpRight size={13} /></a></div>
-            <div class="meta"><span class="domain">{storyDomain(story.url)}</span><span>{story.points.toLocaleString()} points</span><a href={story.discussion_url} target="_blank" rel="noopener noreferrer" onclick={() => { if (!story.is_read) void reader.setRead(story, true); }}><MessageSquare size={12} />{story.comments.toLocaleString()} {story.comments === 1 ? 'comment' : 'comments'}</a><time datetime={story.created_at} title={new Date(story.created_at).toLocaleString()}>{storyAge(story.created_at, now)}</time>{#if story.rank}<span class="rank" title="Position on the HN front page at the last refresh">HN #{story.rank}</span>{/if}</div>
+            <div class="story-title"><span class="position" aria-hidden="true">{index + 1}.</span><a href={story.url} target="_blank" rel="noopener noreferrer" onclick={() => { if (!story.is_read) void reader.setRead(story, true); }}>{story.title}<ArrowUpRight size={iconSizes.inline} /></a></div>
+            <div class="meta"><span class="domain">{storyDomain(story.url)}</span><span>{story.points.toLocaleString()} points</span><a href={story.discussion_url} target="_blank" rel="noopener noreferrer" onclick={() => { if (!story.is_read) void reader.setRead(story, true); }}><MessageSquare size={iconSizes.inline} />{story.comments.toLocaleString()} {story.comments === 1 ? 'comment' : 'comments'}</a><time datetime={story.created_at} title={new Date(story.created_at).toLocaleString()}>{storyAge(story.created_at, now)}</time>{#if story.rank}<span class="rank" title="Position on the HN front page at the last refresh">HN #{story.rank}</span>{/if}</div>
           </div>
-          <button class="save" class:saved={story.is_saved} disabled={story.is_saved || readerState.busy.includes(`save:${story.id}`)} aria-label={`${story.is_saved ? 'Saved to reading list' : 'Save to reading list'}: ${story.title}`} onclick={() => reader.save(story)}>{#if story.is_saved}<Check size={16} /><span>Saved</span>{:else}<BookmarkPlus size={17} /><span>{readerState.busy.includes(`save:${story.id}`) ? 'Saving…' : 'Save'}</span>{/if}</button>
+          <button class="save" class:saved={story.is_saved} disabled={story.is_saved || readerState.busy.includes(`save:${story.id}`)} aria-label={`${story.is_saved ? 'Saved to reading list' : 'Save to reading list'}: ${story.title}`} onclick={() => reader.save(story)}>{#if story.is_saved}<Check size={iconSizes.action} /><span>Saved</span>{:else}<BookmarkPlus size={iconSizes.action} /><span>{readerState.busy.includes(`save:${story.id}`) ? 'Saving…' : 'Save'}</span>{/if}</button>
         </article>
       {/each}
     </div>
   {/if}
   {#if readerState.data}
-    <div class="list-footer"><span>{visible.length} of {stories.length} stories{hideRead ? ' unread' : ''}</span>{#if preview}<a href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Explore Hacker News <ArrowRight size={14} /></a>{:else if visible.length < stories.length}<button onclick={() => shown += 25}>Show more</button>{:else if shown > 25}<button onclick={() => shown = 25}>Show less</button>{/if}</div>
+    <div class="list-footer"><span>{visible.length} of {stories.length} stories{hideRead ? ' unread' : ''}</span>{#if preview}<a href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Explore Hacker News <ArrowRight size={iconSizes.inline} /></a>{:else if visible.length < stories.length}<button onclick={() => shown += 25}>Show more</button>{:else if shown > 25}<button onclick={() => shown = 25}>Show less</button>{/if}</div>
     {#if !preview}<p class="footnote">{readerState.data.stale || readerState.error ? 'Showing previous results. ' : ''}Updated {storyAge(readerState.data.fetched_at, now)}. {readerState.scope.view === 'front' ? 'Live ordering from the HN API.' : 'Up to 100 stories from HN Search (Algolia); its index can lag behind HN.'} Read status syncs across your devices. Refreshes are cached for five minutes.</p>{/if}
   {/if}
 </section>
@@ -116,7 +117,7 @@
   header, .heading, .header-actions, .toolbar, .tabs, .windows, .meta, .list-footer { display: flex; align-items: center; }
   header { justify-content: space-between; gap: 16px; }
   .heading { gap: 13px; min-width: 0; }
-  .hn-mark { display: grid; place-items: center; flex-shrink: 0; width: 31px; height: 31px; border: 1px solid var(--warning); border-radius: 8px; color: var(--warning); font: 600 20px monospace; }
+  .page-symbol { display:grid; place-items:center; flex-shrink:0; width:31px; height:31px; color:var(--highlight); }
   .eyebrow { margin: 0; font-size: 11px; letter-spacing: .15em; font-weight: 600; }
   .eyebrow { color: var(--muted); font-size: 10px; }
   h1 { margin: 7px 0 0; font-size: 23px; font-weight: 500; line-height: 1.4; }
