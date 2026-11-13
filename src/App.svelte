@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { ArrowRight, Command, Moon, Search, Sun, House, Activity } from '@lucide/svelte';
+  import { ArrowRight, Command, Moon, Search, Sun, House, Activity, Newspaper } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
+  import HackerNews from './components/HackerNews.svelte';
   import Infrastructure from './components/Infrastructure.svelte';
   import SavedArticle from './components/SavedArticle.svelte';
   import { PageNavigation, isPlainClick, webSearchUrl } from './lib/navigation';
@@ -30,10 +31,10 @@
   });
   function routeFromPath(path: string) {
     const reader = /^\/reading\/([A-Za-z0-9_-]{1,80})\/?$/.exec(path);
-    return { page: reader ? 'reader' as const : path.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' as const : 'home' as const, articleId: reader?.[1] ?? '' };
+    return { page: reader ? 'reader' as const : path.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' as const : path.replace(/\/$/, '') === '/hacker-news' ? 'hacker-news' as const : 'home' as const, articleId: reader?.[1] ?? '' };
   }
   const initialRoute = routeFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
-  let page = $state<'home' | 'infrastructure' | 'reader'>(initialRoute.page);
+  let page = $state<'home' | 'infrastructure' | 'reader' | 'hacker-news'>(initialRoute.page);
   let readerId = $state(initialRoute.articleId);
   let monitorFocus = $state(typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('monitor'));
   let homeVisited = $state(initialRoute.page === 'home');
@@ -223,6 +224,7 @@
       <nav class="page-navigation" aria-label="Main navigation">
         <a href="/" class:current={page === 'home'} aria-current={page === 'home' ? 'page' : undefined} onclick={event => navigate(event, '/')}><House size={15} strokeWidth={1.7} />Home</a>
         <a href="/infrastructure" class:current={page === 'infrastructure'} aria-current={page === 'infrastructure' ? 'page' : undefined} onclick={event => navigate(event, '/infrastructure')}><Activity size={15} strokeWidth={1.7} />Infrastructure</a>
+        <a href="/hacker-news" class:current={page === 'hacker-news'} aria-current={page === 'hacker-news' ? 'page' : undefined} onclick={event => navigate(event, '/hacker-news')}><Newspaper size={15} strokeWidth={1.7} />Hacker News</a>
       </nav>
 
       <div class="top-actions">
@@ -244,6 +246,8 @@
     <main>
       {#if page === 'reader'}
         {#key readerId}<SavedArticle articleId={readerId} {theme} onback={backToList} />{/key}
+      {:else if page === 'hacker-news'}
+        <HackerNews onnavigate={navigate} />
       {:else if page === 'infrastructure'}
         <Infrastructure {monitorFocus} />
       {/if}
@@ -328,6 +332,7 @@
       <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} onmonitor={navigate} active={page === 'home'} />
       <ReadingList active={page === 'home'} onnavigate={navigate} />
       <Feeds active={page === 'home'} />
+      <HackerNews preview active={page === 'home'} onnavigate={navigate} />
       </div>
       {/if}
     </main>

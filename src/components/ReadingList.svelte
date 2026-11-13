@@ -17,6 +17,7 @@
         url: string;
         source_kind?: 'url' | 'upload';
         upload_filename?: string | null;
+        hn_discussion_url?: string | null;
         is_read: boolean;
         saved_at: string;
         archived_at: string | null;
@@ -665,6 +666,7 @@
                         {/if}
 
                         <small>{article.source_kind === 'upload' ? `Uploaded PDF · ${article.upload_filename ?? 'Document'}` : hostname(article.url)}</small>
+                        {#if article.hn_discussion_url}<small><a href={article.hn_discussion_url} target="_blank" rel="noopener noreferrer">HN discussion ↗</a></small>{/if}
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
                                 <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : 'Read saved copy'}</a>

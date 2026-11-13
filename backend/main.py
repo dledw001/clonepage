@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from metadata import fetch_title
 from nas_temps import NasTempsGateway, router as infrastructure_router
 from wud import WudGateway, router as containers_router
+from hacker_news import HackerNewsGateway, initialize_hacker_news, router as hacker_news_router
 from availability import AvailabilityGateway, initialize_availability, router as availability_router
 from feeds import initialize_feeds, router as feeds_router
 from saved_copies import COPY_COLUMNS, initialize_saved_copies, remove_article_copies, router as saved_copies_router
@@ -32,7 +33,7 @@ DB_PATH = Path(
 
 ARTICLE_COLUMNS = (
     "id, title, url, is_read, saved_at, archived_at, "
-    "index_status, indexed_at, index_error, index_attempts, index_retry_at, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS
+    "index_status, indexed_at, index_error, index_attempts, index_retry_at, hn_story_id, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS
 )
 
 
@@ -215,6 +216,7 @@ async def lifespan(app: FastAPI):
     initialize_saved_copies()
     initialize_uploads()
     initialize_pdf_progress()
+    initialize_hacker_news()
     initialize_shortcuts()
     initialize_services()
     initialize_availability()
@@ -234,7 +236,11 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(4.0, connect=2.0),
         limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
         follow_redirects=False, trust_env=False, verify=True,
-    ) as availability_client:
+    ) as availability_client, httpx.AsyncClient(
+        timeout=httpx.Timeout(8.0, connect=3.0), follow_redirects=False, trust_env=False,
+        headers={"User-Agent": "Clonepage/0.4 (personal HN reader)"},
+    ) as hn_client:
+        app.state.hacker_news = HackerNewsGateway(hn_client)
         app.state.nas_temps = NasTempsGateway(client)
         app.state.wud = WudGateway(wud_client, os.getenv("WUD_URL", "http://10.0.0.149:3000"),
                                    os.getenv("WUD_API_TOKEN", ""), os.getenv("WUD_PUBLIC_URL", ""))
@@ -268,6 +274,7 @@ app = FastAPI(
 )
 app.include_router(infrastructure_router)
 app.include_router(containers_router)
+app.include_router(hacker_news_router)
 app.include_router(feeds_router)
 app.include_router(saved_copies_router)
 app.include_router(uploads_router)
@@ -300,6 +307,7 @@ class ArticleUpdate(BaseModel):
 
 def serialize(row):
     article = dict(row)
+    article["hn_discussion_url"] = f"https://news.ycombinator.com/item?id={article['hn_story_id']}" if article.get("hn_story_id") else None
     article["reading_progress"] = progress_for(article)
     for name in PROGRESS_NAMES:
         article.pop(name, None)

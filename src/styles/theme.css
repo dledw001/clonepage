@@ -529,7 +529,7 @@ footer {
 @media (max-width: 540px) {
     .topbar { flex-wrap: wrap; gap: 20px; }
     .page-navigation { order: 3; width: 100%; justify-content: center; }
-    .page-navigation a { flex: 1; justify-content: center; }
+    .page-navigation a { flex: 1; justify-content: center; padding: 9px 6px; gap: 5px; font-size: 10px; }
     .page {
         --page-top: 22px;
         --page-inline: 20px;
