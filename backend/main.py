@@ -25,6 +25,9 @@ from dsm_services import initialize_services
 from document_uploads import UPLOAD_COLUMNS, initialize_uploads, router as uploads_router
 from pdf_progress import PROGRESS_COLUMNS, PROGRESS_NAMES, initialize_pdf_progress, progress_for, router as progress_router
 
+from article_progress import HTML_PROGRESS_COLUMNS, HTML_PROGRESS_NAMES, initialize_article_progress, progress_for as html_progress_for, router as article_progress_router
+from home import initialize_home, router as home_router
+
 import re
 
 DB_PATH = Path(
@@ -33,7 +36,7 @@ DB_PATH = Path(
 
 ARTICLE_COLUMNS = (
     "id, title, url, is_read, saved_at, archived_at, "
-    "index_status, indexed_at, index_error, index_attempts, index_retry_at, hn_story_id, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS
+    "index_status, indexed_at, index_error, index_attempts, index_retry_at, hn_story_id, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS + ", " + HTML_PROGRESS_COLUMNS
 )
 
 
@@ -217,9 +220,11 @@ async def lifespan(app: FastAPI):
     initialize_uploads()
     initialize_pdf_progress()
     initialize_hacker_news()
+    initialize_article_progress()
     initialize_shortcuts()
     initialize_services()
     initialize_availability()
+    initialize_home()
     app.state.dsm_sessions = DSMSessions()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
@@ -279,6 +284,8 @@ app.include_router(feeds_router)
 app.include_router(saved_copies_router)
 app.include_router(uploads_router)
 app.include_router(progress_router)
+app.include_router(article_progress_router)
+app.include_router(home_router)
 app.include_router(availability_router)
 app.include_router(shortcuts_router)
 app.include_router(dsm_router)
@@ -309,7 +316,8 @@ def serialize(row):
     article = dict(row)
     article["hn_discussion_url"] = f"https://news.ycombinator.com/item?id={article['hn_story_id']}" if article.get("hn_story_id") else None
     article["reading_progress"] = progress_for(article)
-    for name in PROGRESS_NAMES:
+    article["html_reading_progress"] = html_progress_for(article)
+    for name in (*PROGRESS_NAMES, *HTML_PROGRESS_NAMES):
         article.pop(name, None)
     article["is_read"] = bool(article["is_read"])
     article["copy_available"] = bool(article.get("copy_saved_at"))

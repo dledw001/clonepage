@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import PDFReader from './PDFReader.svelte';
+  import { ReadingProgress, type ProgressState } from '../lib/pdf-progress';
+  import { captureHTMLPosition, restoreHTMLPosition, listenForReadingInput, type ArticleGeometry, type HTMLPosition } from '../lib/html-progress';
   import { ArrowLeft, ArrowUpRight, Download, RefreshCw } from '@lucide/svelte';
 
   let { articleId, theme, onback }: { articleId: string; theme: 'light' | 'dark'; onback?: (event: MouseEvent) => void } = $props();
@@ -20,6 +22,87 @@
   let disposed = false;
   const pending = $derived(info?.copy_status === 'pending' || info?.copy_status === 'processing');
   const contentUrl = $derived(`/api/reading/${articleId}/copy/content?${new URLSearchParams({ theme, version: info?.copy_saved_at ?? '' })}`);
+
+  let progressToolbar=$state<HTMLDivElement>();
+  let articleProgress: ReadingProgress<HTMLPosition> | undefined;
+  let progressVersion = '';
+  let stopFrameInputs=()=>{};
+  function articleInteracted(){userInteracted=true;restoreObserver?.disconnect();}
+  let articleSync = $state.raw<ProgressState<HTMLPosition>>({ready:false,status:'loading',position:null,message:''});
+  let userInteracted = false;
+  let restoring = false;
+  let restoreObserver: ResizeObserver | undefined;
+  let restoreDeadline = 0;
+  let scrollFrame: number | undefined;
+  let restoreEnd: ReturnType<typeof setTimeout> | undefined;
+
+  function articleGeometry(): ArticleGeometry | null {
+    const body = frame?.contentDocument?.body;
+    if (!body || info?.copy_format !== 'html') return null;
+    const root = body.querySelector('article') ?? body;
+    const blocks = Array.from(root.querySelectorAll('h1,h2,h3,h4,p,li,pre,blockquote,figure,table')).slice(0,100001)
+      .map(element => { const box=element.getBoundingClientRect(); return {top:box.top,height:box.height}; });
+    return {height:body.getBoundingClientRect().height,viewport:Math.max(1,window.innerHeight-(progressToolbar?.offsetHeight??0)-20),blocks};
+  }
+
+  function currentArticlePosition(): HTMLPosition | null {
+    const geometry=articleGeometry();
+    if (!geometry || !frame) return null;
+    return captureHTMLPosition(-frame.getBoundingClientRect().top+(progressToolbar?.offsetHeight??0)+20,geometry);
+  }
+
+  function noteArticlePosition() {
+    if (restoring || !userInteracted || !articleSync.ready || !frame) return;
+    const position=currentArticlePosition();
+    if (position && (position.fraction>0.005 || articleSync.position)) articleProgress?.note(position);
+  }
+
+  function restoreArticlePosition(position: HTMLPosition | null) {
+    const geometry=articleGeometry();
+    if (!geometry || !frame || disposed) return;
+    restoring=true;
+    const top=Math.max(0,window.scrollY+frame.getBoundingClientRect().top+restoreHTMLPosition(position,geometry)-(progressToolbar?.offsetHeight??0)-20);
+    window.scrollTo({top,behavior:'instant'});
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{restoring=false;}));
+  }
+
+  async function setupArticleProgress() {
+    const version=info?.copy_saved_at;
+    if (!version || info?.copy_format!=='html' || !frame?.contentDocument?.body) return;
+    const reloaded=Boolean(articleProgress&&progressVersion===version);
+    if (!reloaded) {
+      articleProgress?.dispose();
+      progressVersion=version;
+      let storage: Storage|undefined;
+      try {storage=window.localStorage;} catch { /* NAS saving does not require local storage. */ }
+      articleProgress=new ReadingProgress<HTMLPosition>(articleId,version,next=>articleSync=next,undefined,storage,
+        ()=>window.dispatchEvent(new Event('clonepage:reading-changed')),'html');
+      await articleProgress.load();
+    }
+    if (disposed || progressVersion!==version || !articleSync.ready) return;
+    const position=articleSync.position;
+    // Restore only before the user starts interacting; theme reloads retain the
+    // current local position. Late images can settle for a short bounded period.
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if(!disposed&&progressVersion===version&&(reloaded||!userInteracted)&&position)restoreArticlePosition(position);
+    }));
+    restoreObserver?.disconnect();clearTimeout(restoreEnd);
+    restoreDeadline=Date.now()+2500;
+    restoreObserver=new ResizeObserver(()=>{
+      if(!userInteracted&&Date.now()<restoreDeadline&&position)requestAnimationFrame(()=>restoreArticlePosition(position));
+    });
+    restoreObserver.observe(frame.contentDocument.body);
+    restoreEnd=setTimeout(()=>restoreObserver?.disconnect(),2500);
+    if(articleSync.status==='pending')void articleProgress?.flush();
+  }
+
+  function articleFrameLoaded(){
+    stopFrameInputs();
+    if(frame?.contentDocument)stopFrameInputs=listenForReadingInput(frame.contentDocument,articleInteracted);
+    fitFrame();void setupArticleProgress();
+  }
+  async function resumeSavedPosition(){const position=await articleProgress?.load(true);if(articleSync.ready)restoreArticlePosition(position??null);}
+  async function startArticleOver(){if(await articleProgress?.reset())restoreArticlePosition(null);}
 
   function fileSize(bytes: number) {
     return bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -77,11 +160,22 @@
 
   onMount(() => {
     void load();
+    const stopWindowInputs=listenForReadingInput(window,articleInteracted);
+    const positionTimer=setInterval(()=>{if(!document.hidden){noteArticlePosition();void articleProgress?.flush();}},15000);
+    const scroll=()=>{if(scrollFrame===undefined)scrollFrame=requestAnimationFrame(()=>{scrollFrame=undefined;noteArticlePosition();});};
+    const leave=()=>{noteArticlePosition();void articleProgress?.flush(true);};
+    const hide=()=>{if(document.hidden)leave();};
+    window.addEventListener('scroll',scroll,{passive:true});
+    window.addEventListener('pagehide',leave);
+    document.addEventListener('visibilitychange',hide);
     const poll = setInterval(() => { if (!document.hidden && !refreshing && (pending || info?.copy_retry_at)) void load(); }, 5000);
     const visible = () => { if (!document.hidden && !refreshing) void load(); };
     document.addEventListener('visibilitychange', visible);
     window.addEventListener('focus', visible);
-    return () => { disposed = true; controller.abort(); observer?.disconnect(); if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame); clearInterval(poll); document.removeEventListener('visibilitychange', visible); window.removeEventListener('focus', visible); };
+    return () => { noteArticlePosition();articleProgress?.dispose();restoreObserver?.disconnect();clearTimeout(restoreEnd);
+      if(scrollFrame!==undefined)cancelAnimationFrame(scrollFrame);
+      window.removeEventListener('scroll',scroll);stopWindowInputs();stopFrameInputs();clearInterval(positionTimer);window.removeEventListener('pagehide',leave);document.removeEventListener('visibilitychange',hide);
+      disposed = true; controller.abort(); observer?.disconnect(); if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame); clearInterval(poll); document.removeEventListener('visibilitychange', visible); window.removeEventListener('focus', visible); };
   });
 </script>
 
@@ -106,7 +200,9 @@
     {#if info.copy_format === 'pdf'}
       {#key info.copy_saved_at}<PDFReader {articleId} version={info.copy_saved_at ?? ''} url={contentUrl} />{/key}
     {:else}
-      <iframe bind:this={frame} class="reader-frame" title="Saved article content" src={contentUrl} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload={fitFrame} style:height={`${frameHeight}px`}></iframe>
+      <div class="article-progress" bind:this={progressToolbar} role="status"><a href="/" onclick={onback} aria-label="Back to reading list" class="progress-back"><ArrowLeft size={14}/>Back</a><span>{articleSync.ready?`${Math.round((articleSync.position?.fraction??0)*100)}% through`:'Loading reading position…'}<small>{articleSync.status==='saving'||articleSync.status==='pending'?'Saving position…':articleSync.status==='saved'?'Position saved':''}</small></span><button disabled={!articleSync.ready||articleSync.status==='conflict'} onclick={startArticleOver}>Start over</button></div>
+      {#if articleSync.message}<div class="progress-notice"><p>{articleSync.message}</p>{#if articleSync.status==='conflict'&&articleSync.ready}<button onclick={resumeSavedPosition}>Resume saved position</button><button onclick={()=>articleProgress?.keepCurrent(currentArticlePosition())}>Keep this position</button>{:else if articleSync.status==='conflict'}<button onclick={load}>Reload saved copy</button>{:else if articleSync.ready}<button onclick={()=>articleProgress?.flush()}>Retry saving position</button>{:else}<button onclick={resumeSavedPosition}>Retry loading position</button>{/if}</div>{/if}
+      <iframe bind:this={frame} class="reader-frame" title="Saved article content" src={contentUrl} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" onload={articleFrameLoaded} style:height={`${frameHeight}px`}></iframe>
     {/if}
     <p class="hint">This copy is stored on your NAS. Download it to read without a connection to the NAS.</p>
   {:else if loading}<div class="empty">Loading saved copy...</div>
@@ -114,6 +210,13 @@
 </section>
 
 <style>
+  .article-progress{position:sticky;top:calc(8px + env(safe-area-inset-top));z-index:2;display:flex;justify-content:space-between;align-items:center;gap:15px;margin:20px 0 12px;padding:10px 15px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:12px;color:var(--text)}
+  .article-progress{flex-wrap:wrap}.article-progress>span{flex:1;min-width:80px}.progress-back{display:inline-flex;align-items:center;gap:5px;color:var(--highlight);font-size:11px;text-decoration:none;min-height:34px}
+  .article-progress small{display:block;margin-top:4px;font-size:10px;color:var(--muted)}
+  .article-progress button,.progress-notice button{border:1px solid var(--line);background:var(--bg);color:var(--highlight);padding:8px 11px;border-radius:7px;font:inherit;font-size:11px}
+  .article-progress button:disabled{opacity:.5;cursor:default}.progress-notice{margin:12px 0;color:var(--warning);font-size:12px;line-height:1.7}.progress-notice button{margin-right:8px}
+  @media (hover:none) and (pointer:coarse){.article-progress button,.progress-notice button{min-height:44px}}
+
   .saved-article { max-width: 1060px; margin: 50px auto 0; }
   .back { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; text-decoration: none; }
   header { margin: 30px 0 24px; }
@@ -129,5 +232,5 @@
   .notice button { background: transparent; border: 0; color: var(--highlight); cursor: pointer; font: inherit; margin-left: 12px; }
   iframe { width: 100%; display: block; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
   .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: 13px; }
-  @media(max-width:540px) { .saved-article { margin-top: 32px; } h1 { font-size: 27px; } }
+  @media (max-width:540px) { .saved-article { margin-top: 32px; } h1 { font-size: 27px; } }
 </style>

@@ -1,10 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { ArrowRight, Command, Moon, Search, Sun, House, Activity, Newspaper } from '@lucide/svelte';
+  import { ArrowRight, Command, Moon, Search, Sun, House, Activity, Newspaper, Settings2 } from '@lucide/svelte';
 
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
   import HackerNews from './components/HackerNews.svelte';
+  import NeedsAttention from './components/NeedsAttention.svelte';
+  import ContinueReading from './components/ContinueReading.svelte';
+  import HomeCustomize from './components/HomeCustomize.svelte';
+  import { HomeLayoutStore, defaultHomeSettings, homeSectionFromSearch, type LayoutState } from './lib/home';
   import Infrastructure from './components/Infrastructure.svelte';
   import SavedArticle from './components/SavedArticle.svelte';
   import { PageNavigation, isPlainClick, webSearchUrl } from './lib/navigation';
@@ -17,6 +21,11 @@
   const shortcutStore = new ShortcutStore(next => shortcutState = next);
   const commands = $derived(shortcutState.items.map(item => ({ ...item, icon: shortcutIcon(item.icon) })));
   type CommandItem = (typeof commands)[number];
+
+  let layoutState=$state<LayoutState>({settings:defaultHomeSettings(),revision:0,loaded:false,loading:false,busy:false,conflict:false,error:''});
+  const layoutStore=new HomeLayoutStore(next=>layoutState=next);
+  let customizingHome=$state(false);
+  let homeFocus=$state(typeof window==='undefined'?null:homeSectionFromSearch(window.location.search));
 
   let now = $state(new Date());
   let query = $state('');
@@ -45,7 +54,7 @@
     await tick();
   });
 
-  function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; monitorFocus = new URLSearchParams(window.location.search).get('monitor'); }
+  function syncRoute() { const route = routeFromPath(window.location.pathname); page = route.page; readerId = route.articleId; monitorFocus = new URLSearchParams(window.location.search).get('monitor'); homeFocus=homeSectionFromSearch(window.location.search); }
 
   let searchInput = $state<HTMLInputElement>();
   let searchRegion = $state<HTMLDivElement>();
@@ -86,7 +95,8 @@
 
   onMount(() => {
     void shortcutStore.refresh();
-    const refreshShortcuts = () => { if (!document.hidden) void shortcutStore.refresh(); };
+    void layoutStore.refresh().then(async()=>{await tick();scrollHomeSection();});
+    const refreshShortcuts = () => { if (!document.hidden) { void shortcutStore.refresh(); if(!customizingHome)void layoutStore.refresh(); } };
     document.addEventListener('visibilitychange', refreshShortcuts);
     window.addEventListener('focus', refreshShortcuts);
     const saved = localStorage.getItem('clonepage-theme');
@@ -100,7 +110,7 @@
 
     const stopNavigation = navigation?.start();
     return () => {
-      shortcutStore.dispose();
+      shortcutStore.dispose(); layoutStore.dispose();
       document.removeEventListener('visibilitychange', refreshShortcuts);
       window.removeEventListener('focus', refreshShortcuts);
       clearInterval(interval);
@@ -108,10 +118,13 @@
     };
   });
 
-  function navigate(event: MouseEvent, path: string) {
+  function scrollHomeSection(){if(page==='home'&&homeFocus)document.getElementById(`home-${homeFocus}`)?.scrollIntoView({block:'start',behavior:'instant'});}
+
+  async function navigate(event: MouseEvent, path: string) {
     if (!isPlainClick(event)) return;
     event.preventDefault();
-    void navigation?.go(path);
+    await navigation?.go(path);
+    scrollHomeSection();
   }
 
   function backToList(event: MouseEvent) {
@@ -229,6 +242,7 @@
 
       <div class="top-actions">
         <span class="top-caption">YOUR PERSONAL SPACE</span>
+        {#if page==='home'}<button class="icon-button" aria-label="Customize homepage" title="Customize homepage" aria-expanded={customizingHome} onclick={()=>customizingHome=!customizingHome}><Settings2 size={18}/></button>{/if}
         <button
           class="icon-button"
           onclick={toggleTheme}
@@ -253,7 +267,8 @@
       {/if}
       {#if homeVisited}
       <div hidden={page !== 'home'}>
-      <section class="hero">
+      <section class="hero" class:compact={!layoutState.settings.show_clock}>
+        {#if layoutState.settings.show_clock}
         <div class="eyebrow">
           <span class="eyebrow-line"></span>
           A LITTLE ROOM TO THINK
@@ -265,6 +280,7 @@
 
         <h1>{greeting}</h1>
 
+        {/if}
         <div class="search-region" bind:this={searchRegion}>
           <div class="search-box" class:active={paletteOpen}>
             <Search size={21} strokeWidth={1.8} />
@@ -329,10 +345,20 @@
         </p>
       </section>
 
-      <Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} onmonitor={navigate} active={page === 'home'} />
-      <ReadingList active={page === 'home'} onnavigate={navigate} />
-      <Feeds active={page === 'home'} />
-      <HackerNews preview active={page === 'home'} onnavigate={navigate} />
+      {#if customizingHome}<HomeCustomize data={layoutState} store={layoutStore} onclose={()=>customizingHome=false}/>{/if}
+      {#if layoutState.error&&!customizingHome}<p class="home-layout-error" role="status">{layoutState.error} Your last available homepage layout is kept. <button onclick={()=>layoutStore.refresh(true)}>Try again</button></p>{/if}
+      {#each layoutState.settings.sections as section(section.id)}
+        {#if section.visible||homeFocus===section.id}
+          <div id={`home-${section.id}`} class="home-section">
+            {#if section.id==='attention'}<NeedsAttention active={page==='home'} onnavigate={navigate}/>
+            {:else if section.id==='shortcuts'}<Shortcuts data={shortcutState} store={shortcutStore} onexecute={execute} onmonitor={navigate} active={page==='home'}/>
+            {:else if section.id==='continue'}<ContinueReading active={page==='home'} previewCount={layoutState.settings.previews.continue_reading} onnavigate={navigate}/>
+            {:else if section.id==='reading'}<ReadingList active={page==='home'} previewCount={layoutState.settings.previews.reading} onnavigate={navigate}/>
+            {:else if section.id==='feeds'}<Feeds active={page==='home'} previewCount={layoutState.settings.previews.feeds}/>
+            {:else if section.id==='hacker-news'}<HackerNews preview active={page==='home'} previewCount={layoutState.settings.previews.hacker_news} previewScope={layoutState.settings.hacker_news} onnavigate={navigate}/>{/if}
+          </div>
+        {/if}
+      {/each}
       </div>
       {/if}
     </main>

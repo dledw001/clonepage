@@ -3,7 +3,7 @@
   import { ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, Plus, RefreshCw, Rss, Search, Settings2, Trash2, X } from '@lucide/svelte';
   import { FeedReader, type ReaderState, type Discovery, type FeedPreview } from '../lib/feed-reader';
 
-  let { active = true }: { active?: boolean } = $props();
+  let { active = true, previewCount = 3 }: { active?: boolean; previewCount?: number } = $props();
   let refreshOnReturn = false;
   $effect(() => { if (active && refreshOnReturn) { refreshOnReturn = false; void reader.refresh(); } });
 
@@ -23,7 +23,7 @@
   let discoverySequence = 0;
   const subscriptions = $derived(readerState.data?.subscriptions ?? []);
   const entries = $derived(readerState.data?.entries ?? []);
-  const visible = $derived(readerState.expanded ? entries : entries.slice(0, 3));
+  const visible = $derived(readerState.expanded ? entries : entries.slice(0, previewCount));
   const failedFeeds = $derived(subscriptions.filter(feed => feed.error));
 
   $effect(() => {
@@ -156,7 +156,7 @@
       {/each}
     </div>
     <div class="list-footer"><span>{visible.length} of {readerState.data.total} {readerState.data.total === 1 ? 'story' : 'stories'}{readerState.loading ? ' · updating' : ''}</span><div>
-      {#if (!readerState.expanded && entries.length > 3) || readerState.data.next_cursor}<button disabled={readerState.loading} onclick={() => reader.showMore()}>{readerState.loading ? 'Loading...' : 'Show more'}</button>{/if}
+      {#if (!readerState.expanded && entries.length > previewCount) || readerState.data.next_cursor}<button disabled={readerState.loading} onclick={() => reader.showMore()}>{readerState.loading ? 'Loading...' : 'Show more'}</button>{/if}
       {#if readerState.expanded}<button onclick={() => reader.collapse()}>Show less</button>{/if}
     </div></div>
   {/if}

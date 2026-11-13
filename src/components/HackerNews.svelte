@@ -3,10 +3,10 @@
   import { ArrowRight, ArrowUpRight, BookmarkPlus, Check, Circle, CircleCheck, MessageSquare, RefreshCw } from '@lucide/svelte';
   import { HackerNewsReader, storyAge, storyDomain, type HNState, type HNScope } from '../lib/hacker-news';
 
-  let { preview = false, active = true, onnavigate }: {
-    preview?: boolean; active?: boolean; onnavigate?: (event: MouseEvent, path: string) => void;
+  let { preview = false, active = true, previewCount = 3, previewScope = {view:'top',window:'24h'}, onnavigate }: {
+    preview?: boolean; active?: boolean; previewCount?: number; previewScope?: HNScope; onnavigate?: (event: MouseEvent, path: string) => void;
   } = $props();
-  const initialScope = untrack((): HNScope => ({ view: preview ? 'top' : 'front', window: '24h' }));
+  const initialScope = untrack((): HNScope => ({ view: preview ? previewScope.view : 'front', window: preview ? previewScope.window : '24h' }));
   let readerState = $state<HNState>({ scope: initialScope, data: null, loading: false, busy: [], error: '', notice: '' });
   const reader = new HackerNewsReader(next => readerState = next, (...args) => fetch(...args), kind => {
     window.dispatchEvent(new Event('clonepage:hn-changed'));
@@ -17,11 +17,13 @@
   let shown = $state(25);
   let now = $state(Date.now());
   const stories = $derived((readerState.data?.stories ?? []).filter(story => !hideRead || !story.is_read));
-  const visible = $derived(stories.slice(0, preview ? 3 : shown));
+  const visible = $derived(stories.slice(0, preview ? previewCount : shown));
   const notice = $derived(readerState.error || readerState.data?.error || readerState.data?.notice || '');
   const heading = $derived(readerState.scope.view === 'front' ? 'The front page, at your pace.' : readerState.scope.view === 'top' ? 'Stories worth catching up on.' : 'Conversations worth a look.');
 
   $effect(() => { const current = active; if (mounted && current) untrack(() => { void reader.refresh(); }); });
+
+  $effect(()=>{const view=previewScope.view,window=previewScope.window;if(mounted&&preview)untrack(()=>reader.setScope({view,window}));});
 
   onMount(() => {
     mounted = true;
@@ -47,7 +49,7 @@
 
 <section class="hn-reader" class:preview aria-label="Hacker News">
   <header>
-    <div class="heading"><span class="hn-mark" aria-hidden="true">Y</span><div>{#if preview}<h2>HACKER NEWS</h2><small>Top stories · past 24 hours</small>{:else}<div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1>{/if}</div></div>
+    <div class="heading"><span class="hn-mark" aria-hidden="true">Y</span><div>{#if preview}<h2>HACKER NEWS</h2><small>{readerState.scope.view==='front'?'Front page':readerState.scope.view==='top'?'Top stories':'Most discussed'}{readerState.scope.view!=='front'?` · past ${readerState.scope.window==='24h'?'24 hours':readerState.scope.window==='7d'?'7 days':'30 days'}`:''}</small>{:else}<div class="eyebrow">HACKER NEWS</div><h1>{heading}</h1>{/if}</div></div>
     <div class="header-actions">
       <button class="icon-button" onclick={() => reader.refresh(true)} disabled={readerState.loading} aria-label="Refresh Hacker News" title="Refresh Hacker News"><RefreshCw size={17} class={readerState.loading ? 'spinning' : ''} /></button>
       {#if preview}<a class="open-reader" href="/hacker-news" onclick={event => onnavigate?.(event, '/hacker-news')}>Open reader <ArrowRight size={15} /></a>{/if}

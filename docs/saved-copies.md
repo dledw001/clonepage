@@ -65,3 +65,7 @@ Run `npm test`, `npm run check`, `npm run build`, and the backend virtual
 environment's `python -B -m unittest discover -s backend/tests -q`.
 Tests use temporary databases/files and mocked downloads to cover preservation,
 image embedding, scanned PDFs, retries, deletion races, and legacy text recovery.
+
+## Reading continuity
+
+Saved HTML articles now synchronize reading position across devices and appear alongside PDFs in Continue reading. See [homepage.md](homepage.md) for behavior, settings, and the article-progress API.

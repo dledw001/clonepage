@@ -54,7 +54,8 @@ button {
     min-height: 100dvh;
     position: relative;
     isolation: isolate;
-    overflow: hidden;
+    /* Clip decoration without creating a scroll container for reader toolbars. */
+    overflow: clip;
     background: var(--bg);
     color: var(--text);
     transition: background .3s, color .3s;
@@ -593,3 +594,8 @@ footer {
         min-width: 44px;
     }
 }
+
+.hero.compact { margin: 45px auto 48px; }
+.home-section { scroll-margin-top: 24px; }
+.home-layout-error { color: var(--warning); font-size: 12px; line-height: 1.7; }
+.home-layout-error button { color: var(--highlight); background: none; border: 0; font: inherit; }

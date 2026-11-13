@@ -9,7 +9,7 @@
         Trash2, Upload, X
     } from '@lucide/svelte';
 
-    let { active = true, onnavigate }: { active?: boolean; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
+    let { active = true, previewCount = 3, onnavigate }: { active?: boolean; previewCount?: number; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
 
     type Article = {
         id: string;
@@ -34,6 +34,7 @@
         copy_warning: string | null;
         copy_retry_at: string | null;
         copy_is_legacy: boolean;
+        html_reading_progress?: { fraction: number; updated_at: string } | null;
         reading_progress?: { page: number; page_count: number } | null;
         snippet?: string | null;
     };
@@ -95,7 +96,7 @@
     const visible = $derived(
         tab === 'archive' || showAll || search.trim()
             ? filtered
-            : filtered.slice(0, 3)
+            : filtered.slice(0, previewCount)
     );
 
 
@@ -669,7 +670,7 @@
                         {#if article.hn_discussion_url}<small><a href={article.hn_discussion_url} target="_blank" rel="noopener noreferrer">HN discussion ↗</a></small>{/if}
                         <div class="saved-copy-actions">
                             {#if article.copy_available}
-                                <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : 'Read saved copy'}</a>
+                                <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : article.copy_format === 'html' && article.html_reading_progress && article.html_reading_progress.fraction > .02 && article.html_reading_progress.fraction < .98 ? `Continue · ${Math.round(article.html_reading_progress.fraction*100)}%` : 'Read saved copy'}</a>
                                 <a href={`/api/reading/${article.id}/copy/download`}>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
                             {/if}
                             {#if article.copy_status === 'pending' || article.copy_status === 'processing'}
@@ -743,7 +744,7 @@
 
         <div class="list-footer">
             <span>{visible.length} of {filtered.length} {filtered.length === 1 ? 'article' : 'articles'}</span>
-            {#if tab === 'queue' && !search.trim() && filtered.length > 3}
+            {#if tab === 'queue' && !search.trim() && filtered.length > previewCount}
                 <button onclick={() => showAll = !showAll}>
                     {showAll ? 'Show less' : 'Show more'}
                 </button>
