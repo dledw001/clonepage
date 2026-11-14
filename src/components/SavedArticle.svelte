@@ -211,27 +211,27 @@
 </section>
 
 <style>
-  .article-progress{position:sticky;top:calc(8px + env(safe-area-inset-top));z-index:2;display:flex;justify-content:space-between;align-items:center;gap:15px;margin:20px 0 12px;padding:10px 15px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:12px;color:var(--text)}
-  .article-progress{flex-wrap:wrap}.article-progress>span{flex:1;min-width:80px}.progress-back{display:inline-flex;align-items:center;gap:5px;color:var(--highlight);font-size:11px;text-decoration:none;min-height:34px}
-  .article-progress small{display:block;margin-top:4px;font-size:10px;color:var(--muted)}
-  .article-progress button,.progress-notice button{border:1px solid var(--line);background:var(--bg);color:var(--highlight);padding:8px 11px;border-radius:7px;font:inherit;font-size:11px}
-  .article-progress button:disabled{opacity:.5;cursor:default}.progress-notice{margin:12px 0;color:var(--warning);font-size:12px;line-height:1.7}.progress-notice button{margin-right:8px}
+  .article-progress{position:sticky;top:calc(8px + env(safe-area-inset-top));z-index:2;display:flex;justify-content:space-between;align-items:center;gap:15px;margin:20px 0 12px;padding:10px 15px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size: var(--font-body);color:var(--text)}
+  .article-progress{flex-wrap:wrap}.article-progress>span{flex:1;min-width:80px}.progress-back{display:inline-flex;align-items:center;gap:5px;color:var(--highlight);font-size: var(--font-small);text-decoration:none;min-height:34px}
+  .article-progress small{display:block;margin-top:4px;font-size: var(--font-caption);color:var(--muted)}
+  .article-progress button,.progress-notice button{border:1px solid var(--line);background:var(--bg);color:var(--highlight);padding:8px 11px;border-radius:7px;font:inherit;font-size: var(--font-small)}
+  .article-progress button:disabled{opacity:.5;cursor:default}.progress-notice{margin:12px 0;color:var(--warning);font-size: var(--font-body);line-height:1.7}.progress-notice button{margin-right:8px}
   @media (hover:none) and (pointer:coarse){.article-progress button,.progress-notice button{min-height:44px}}
 
   .saved-article { max-width: 1060px; margin:0 auto; }
-  .back { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; text-decoration: none; }
+  .back { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--font-small); text-decoration: none; }
   header { margin: 30px 0 24px; }
-  .eyebrow { font-size: 9px; letter-spacing: 2px; color: var(--highlight); }
+  .eyebrow { font-size: var(--font-caption); letter-spacing: 2px; color: var(--highlight); }
   h1 { margin: 16px 0; font-size: 34px; line-height: 1.3; overflow-wrap: anywhere; }
-  header p, .hint { overflow-wrap: anywhere; font-size: 11px; color: var(--muted); line-height: 1.8; }
+  header p, .hint { overflow-wrap: anywhere; font-size: var(--font-small); color: var(--muted); line-height: 1.8; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 22px; }
-  .actions a, .actions button { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--highlight); padding: 0; text-decoration: none; font: inherit; font-size: 11px; cursor: pointer; }
+  .actions a, .actions button { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--highlight); padding: 0; text-decoration: none; font: inherit; font-size: var(--font-small); cursor: pointer; }
   .actions .primary { padding: 10px 13px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; color: var(--text); }
   button:disabled { cursor: default; opacity: .5; }
   a:focus-visible, button:focus-visible { outline: 2px solid var(--highlight); outline-offset: 4px; }
-  .notice { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px; font-size: 12px; color: var(--warning); line-height: 1.8; overflow-wrap: anywhere; }
+  .notice { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 13px 16px; font-size: var(--font-body); color: var(--warning); line-height: 1.8; overflow-wrap: anywhere; }
   .notice button { background: transparent; border: 0; color: var(--highlight); cursor: pointer; font: inherit; margin-left: 12px; }
   iframe { width: 100%; display: block; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-  .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: 13px; }
+  .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: var(--font-title); }
   @media (max-width:540px) { h1 { font-size: 27px; } }
 </style>

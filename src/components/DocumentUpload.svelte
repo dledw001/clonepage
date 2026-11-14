@@ -35,21 +35,21 @@
   .document-upload { margin-top: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); }
   header, h3, .form-footer, .upload { display: flex; align-items: center; gap: 9px; }
   header { justify-content: space-between; }
-  h3 { margin: 0; color: var(--text); font-size: 13px; font-weight: 500; }
+  h3 { margin: 0; color: var(--text); font-size: var(--font-title); font-weight: 500; }
   h3 :global(svg) { color: var(--highlight); }
-  p { margin: 10px 0 20px; font-size: 11px; line-height: 1.8; color: var(--muted); }
+  p { margin: 10px 0 20px; font-size: var(--font-small); line-height: 1.8; color: var(--muted); }
   button { font: inherit; border: 0; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
   .close { display: grid; place-items: center; padding: 6px; background: transparent; color: var(--muted); }
   .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  label { display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: var(--text); min-width: 0; }
+  label { display: flex; flex-direction: column; gap: 8px; font-size: var(--font-small); color: var(--text); min-width: 0; }
   small { color: var(--muted); }
-  input { width: 100%; min-width: 0; padding: 11px 12px; font: inherit; font-size: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+  input { width: 100%; min-width: 0; padding: 11px 12px; font: inherit; font-size: var(--font-body); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
   input[type="file"] { padding: 6px; }
   input::file-selector-button { padding: 7px 10px; margin-right: 10px; border: 0; border-radius: 5px; background: var(--surface-hover); color: var(--text); cursor: pointer; }
   .form-footer { justify-content: space-between; align-items: flex-start; margin-top: 18px; gap: 20px; }
-  small { font-size: 10px; line-height: 1.8; max-width: 430px; }
-  .upload { flex-shrink: 0; padding: 11px 15px; border-radius: 8px; background: var(--highlight); color: var(--bg); font-size: 12px; font-weight: 600; }
+  small { font-size: var(--font-caption); line-height: 1.8; max-width: 430px; }
+  .upload { flex-shrink: 0; padding: 11px 15px; border-radius: 8px; background: var(--highlight); color: var(--bg); font-size: var(--font-body); font-weight: 600; }
   .error { margin: 15px 0 0; color: var(--warning); }
   input:focus-visible, button:focus-visible { outline: 2px solid var(--highlight); outline-offset: 3px; }
   @media(max-width:640px) { .document-upload { padding: 15px; } .fields { grid-template-columns: 1fr; } .form-footer { flex-wrap: wrap; gap: 12px; } .upload { width: 100%; justify-content: center; } }

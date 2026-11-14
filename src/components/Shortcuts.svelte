@@ -407,15 +407,15 @@
   .availability-indicator { position: absolute; top: 7px; right: 6px; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
   .availability-indicator > span { width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; border: 1px solid currentColor; background: var(--bg); }
   .availability-indicator.reachable { color: var(--success); }
-  .availability-indicator.unreachable { color: #d99393; }
+  .availability-indicator.unreachable { color: var(--danger); }
   .availability-indicator.http-error { color: var(--warning); }
   .availability-indicator:hover { background: var(--surface-hover); }
-  .availability-details { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin: 0 0 20px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font-size: 11px; line-height: 1.8; }
+  .availability-details { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin: 0 0 20px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font-size: var(--font-small); line-height: 1.8; }
   .availability-details strong { font-weight: 500; }
   .availability-details p { margin: 5px 0; }
-  .availability-details small, .availability-note { color: var(--muted); font-size: 10px; }
+  .availability-details small, .availability-note { color: var(--muted); font-size: var(--font-caption); }
   .availability-actions { display: flex; align-items: center; gap: 10px; }
-  .availability-actions button { min-height: 32px; white-space: nowrap; color: var(--highlight); font-size: 10px; }
+  .availability-actions button { min-height: 32px; white-space: nowrap; color: var(--highlight); font-size: var(--font-caption); }
   @media (max-width: 540px) { .availability-details { flex-direction: column; } .availability-actions { align-self: flex-end; } }
 
   .shortcut-groups { display: grid; gap: 23px; }
@@ -424,21 +424,21 @@
   @media (max-width: 850px) { .grouped .shortcut-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 540px) { .grouped .shortcut-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .group-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
-  .group-heading h3 { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: 11px; font-weight: 600; color: var(--text); }
-  .group-heading > span { color: var(--muted); font-size: 10px; }
+  .group-heading h3 { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: var(--font-body); font-weight: 600; color: var(--text); }
+  .group-heading > span { color: var(--muted); font-size: var(--font-caption); }
   .group-actions { display: flex; flex-shrink: 0; margin-left: auto; gap: 3px; }
   .group-editor { padding: 16px; border: 1px solid var(--line); border-radius: 8px; margin: 0 0 15px; background: var(--bg); }
-  .group-editor > h3 { margin: 0 0 14px; font-size: 12px; font-weight: 500; }
-  .group-editor > div { display: flex; justify-content: flex-end; gap: 15px; margin-top: 12px; font-size: 11px; }
+  .group-editor > h3 { margin: 0 0 14px; font-size: var(--font-body); font-weight: 500; }
+  .group-editor > div { display: flex; justify-content: flex-end; gap: 15px; margin-top: 12px; font-size: var(--font-small); }
   .shortcut-tile { min-width: 0; position: relative; }
   .shortcut-tile > .shortcut-card { width: 100%; }
   .shortcut-tile > button.shortcut-card { color: var(--text); background: var(--surface); border: 1px solid var(--line); }
   .shortcut-tile > button.shortcut-card:hover { background: var(--surface-hover); border-color: var(--highlight); }
-  .monitor-badge { position: absolute; top: 59px; right: 10px; max-width: calc(100% - 20px); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; color: var(--warning); background: var(--bg); text-decoration: none; font-size: 9px; line-height: 1.2; white-space: nowrap; }
+  .monitor-badge { position: absolute; top: 59px; right: 10px; max-width: calc(100% - 20px); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; color: var(--warning); background: var(--bg); text-decoration: none; font-size: var(--font-caption); line-height: 1.2; white-space: nowrap; }
   .monitor-badge.unknown { color: var(--muted); }
   .monitor-badge:hover { border-color: var(--highlight); color: var(--highlight); }
   @media (max-width: 540px) { .monitor-badge { min-height: 30px; top: 54px; padding: 6px 8px; display: inline-flex; align-items: center; } }
-  .monitor-help { display: flex; align-items: center; gap: 12px; font-size: 10px; color: var(--muted); line-height: 1.7; }
+  .monitor-help { display: flex; align-items: center; gap: 12px; font-size: var(--font-caption); color: var(--muted); line-height: 1.7; }
   .monitor-help button { color: var(--highlight); white-space: nowrap; }
   .arranging { margin-top: 22px; }
   .sortable-card { position: relative; }
@@ -451,7 +451,7 @@
   .drop-before::before { left: -8px; }
   .drop-after::after { right: -8px; }
   .drag-ghost { position: fixed; z-index: 100; pointer-events: none; opacity: .96; border-color: var(--highlight); box-shadow: 0 15px 40px rgba(0,0,0,.35); transform: rotate(-2deg); }
-  .drag-status { position: fixed; z-index: 110; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); width: max-content; padding: 12px 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-hover); color: var(--text); box-shadow: 0 8px 25px rgba(0,0,0,.25); font-size: 11px; line-height: 1.7; margin: 0; pointer-events: none; }
+  .drag-status { position: fixed; z-index: 110; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); width: max-content; padding: 12px 17px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-hover); color: var(--text); box-shadow: 0 8px 25px rgba(0,0,0,.25); font-size: var(--font-small); line-height: 1.7; margin: 0; pointer-events: none; }
   .drag-status:empty { display: none; }
 
   .manager-heading, .editor-heading, .editor-primary, .row-actions, .managed-row, .editor-footer, .color-picker, .delete-confirm { display: flex; align-items: center; gap: 10px; }
@@ -463,15 +463,15 @@
   .small-icon:hover { color: var(--highlight); }
   .shortcut-manager { margin-bottom: 22px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
   .manager-heading, .editor-heading { justify-content: space-between; }
-  h2, h3 { color: var(--text); font-weight: 500; font-size: 15px; margin: 0; }
-  .manager-heading p, .preview p { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 7px 0 0; }
-  .editor-primary { padding: 10px 13px; background: var(--surface-hover); border: 1px solid var(--line); color: var(--text); border-radius: 8px; font-size: 11px; justify-content: center; white-space: nowrap; }
+  h2, h3 { color: var(--text); font-weight: 500; font-size: var(--font-section); margin: 0; }
+  .manager-heading p, .preview p { color: var(--muted); font-size: var(--font-small); line-height: 1.7; margin: 7px 0 0; }
+  .editor-primary { padding: 10px 13px; background: var(--surface-hover); border: 1px solid var(--line); color: var(--text); border-radius: 8px; font-size: var(--font-small); justify-content: center; white-space: nowrap; }
   .shortcut-editor { margin-top: 23px; padding: 22px; background: var(--bg); border: 1px solid var(--line); border-radius: 11px; }
   fieldset { border: 0; padding: 0; margin: 20px 0 0; min-width: 0; }
   .editor-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  label, .color-label { display: flex; flex-direction: column; gap: 8px; font-size: 11px; color: var(--text); min-width: 0; }
-  label small { color: var(--muted); font-size: 10px; }
-  input, select, textarea { width: 100%; min-width: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); padding: 11px 12px; border-radius: 7px; font-size: 12px; outline-color: var(--highlight); }
+  label, .color-label { display: flex; flex-direction: column; gap: 8px; font-size: var(--font-small); color: var(--text); min-width: 0; }
+  label small { color: var(--muted); font-size: var(--font-caption); }
+  input, select, textarea { width: 100%; min-width: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); padding: 11px 12px; border-radius: 7px; font-size: var(--font-body); outline-color: var(--highlight); }
   textarea { resize: vertical; }
   .wide { grid-column: 1 / -1; }
   .appearance { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 30px; margin-top: 25px; }
@@ -479,29 +479,30 @@
   .icon-picker button { position: relative; display: grid; place-items: center; height: 40px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
   .icon-picker button.selected { color: var(--highlight); border-color: var(--highlight); background: var(--surface-hover); }
   .icon-picker :global(.selected-check) { position: absolute; right: 2px; bottom: 2px; }
-  .icon-picker p { color: var(--muted); font-size: 11px; grid-column: 1 / -1; }
+  .icon-picker p { color: var(--muted); font-size: var(--font-small); grid-column: 1 / -1; }
   .color-picker { flex-wrap: wrap; gap: 8px; margin-top: 10px; padding: 3px; }
   .color-picker > button { width: 23px; height: 23px; padding: 0; border-radius: 50%; color: var(--bg); display: grid; place-items: center; }
   .color-picker > button.selected { outline: 1px solid var(--text); outline-offset: 3px; }
-  .custom-color { flex-direction: row; align-items: center; margin-left: 7px; color: var(--muted); font-size: 10px; }
+  .custom-color { flex-direction: row; align-items: center; margin-left: 7px; color: var(--muted); font-size: var(--font-caption); }
   .custom-color input { width: 30px; height: 28px; padding: 2px; }
-  .preview-label { display: block; margin: 0 0 12px; color: var(--muted); font-size: 9px; letter-spacing: 1.3px; }
+  .preview-label { display: block; margin: 0 0 12px; color: var(--muted); font-size: var(--font-caption); letter-spacing: 1.3px; }
   .preview .shortcut-card { width: 100%; }
   .preview .shortcut-card:hover { transform: none; }
-  .editor-footer { justify-content: flex-end; margin-top: 25px; font-size: 11px; }
+  .editor-footer { justify-content: flex-end; margin-top: 25px; font-size: var(--font-small); }
   .managed-list { margin-top: 18px; }
   .managed-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
   .managed-icon { flex-shrink: 0; display: grid; place-items: center; width: 32px; }
   .managed-name { min-width: 0; flex: 1; }
-  .managed-name strong { color: var(--text); font-size: 12px; font-weight: 500; }
-  .managed-name small { display: block; color: var(--muted); font-size: 10px; margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .managed-name strong { color: var(--text); font-size: var(--font-body); font-weight: 500; }
+  .managed-name small { display: block; color: var(--muted); font-size: var(--font-caption); margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-actions { gap: 6px; }
   .small-icon { display: inline-flex; padding: 6px; align-items: center; justify-content: center; }
-  .delete-confirm { justify-content: flex-end; flex-wrap: wrap; padding: 15px 0; font-size: 11px; color: var(--text); }
+  .delete-confirm { justify-content: flex-end; flex-wrap: wrap; padding: 15px 0; font-size: var(--font-small); color: var(--text); }
   .delete-confirm > span { margin-right: auto; }
   .delete-button { color: var(--warning); }
-  .shortcut-status, .shortcut-error { font-size: 12px; line-height: 1.8; color: var(--muted); }
+  .shortcut-status, .shortcut-error { font-size: var(--font-body); line-height: 1.8; color: var(--muted); }
   .shortcut-error { color: var(--warning); }
   .shortcut-error button { color: var(--highlight); margin-left: 12px; }
   @media (max-width: 650px) { .manager-heading { align-items: flex-start; gap: 15px; } .shortcut-manager { padding: 18px; } .shortcut-editor { padding: 16px; } .editor-fields { grid-template-columns: 1fr; } .appearance { grid-template-columns: 1fr; gap: 20px; } .preview { max-width: 210px; } .row-actions { gap: 0; } .small-icon { padding: 7px 5px; } }
+  @media (max-width:360px) { .grouped .shortcut-grid { grid-template-columns:minmax(0,1fr); } }
 </style>

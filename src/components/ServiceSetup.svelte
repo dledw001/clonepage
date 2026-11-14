@@ -108,29 +108,29 @@
   header, h3, .connection-title, .connected, .connected > span, .connected > button, .primary, .form-actions, .colors, .icon-search { display: flex; align-items: center; gap: 10px; }
   header, .connected { justify-content: space-between; }
   header { align-items: flex-start; }
-  h3 { margin: 0; font-size: 15px; color: var(--text); font-weight: 500; }
-  header p, .help, .resume-note { color: var(--muted); font-size: 11px; line-height: 1.8; margin: 8px 0 0; }
+  h3 { margin: 0; font-size: var(--font-section); color: var(--text); font-weight: 500; }
+  header p, .help, .resume-note { color: var(--muted); font-size: var(--font-small); line-height: 1.8; margin: 8px 0 0; }
   button, input, select { font: inherit; }
-  button { cursor: pointer; color: var(--muted); background: transparent; border: 0; font-size: 11px; }
+  button { cursor: pointer; color: var(--muted); background: transparent; border: 0; font-size: var(--font-small); }
   button:disabled { opacity: .45; cursor: default; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--highlight); outline-offset: 3px; }
   .icon-button { padding: 3px; }
   .primary { color: var(--text); background: var(--surface-hover); border: 1px solid var(--line); padding: 10px 14px; border-radius: 8px; justify-content: center; }
   fieldset { margin: 18px 0 0; padding: 0; border: 0; min-width: 0; }
-  label { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: var(--text); font-size: 11px; }
-  label small { color: var(--muted); font-size: 10px; line-height: 1.6; }
-  input, select { width: 100%; min-width: 0; padding: 11px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; font-size: 12px; }
+  label { display: flex; flex-direction: column; gap: 8px; min-width: 0; color: var(--text); font-size: var(--font-small); }
+  label small { color: var(--muted); font-size: var(--font-caption); line-height: 1.6; }
+  input, select { width: 100%; min-width: 0; padding: 11px 12px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; font-size: var(--font-body); }
   .connect-form { margin-top: 22px; padding-bottom: 5px; }
-  .connection-title { flex-wrap: wrap; color: var(--highlight); font-size: 12px; }
-  .connection-title span { font-size: 10px; color: var(--muted); overflow-wrap: anywhere; }
+  .connection-title { flex-wrap: wrap; color: var(--highlight); font-size: var(--font-body); }
+  .connection-title span { font-size: var(--font-caption); color: var(--muted); overflow-wrap: anywhere; }
   .login-fields { display: grid; grid-template-columns: 1fr 1fr 150px; gap: 15px; margin-bottom: 18px; }
   .login-fields label > small { display: inline; }
-  .connected { margin-top: 20px; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--success); font-size: 11px; flex-wrap: wrap; }
+  .connected { margin-top: 20px; padding: 12px 0; border-bottom: 1px solid var(--line); color: var(--success); font-size: var(--font-small); flex-wrap: wrap; }
   .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
   .wide { grid-column: 1 / -1; }
   .domain-input { display: flex; align-items: center; gap: 8px; }
   .domain-input input { flex: 1; }
-  .domain-input span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .domain-input span { color: var(--muted); font-size: var(--font-small); white-space: nowrap; }
   .appearance { display: grid; grid-template-columns: minmax(0, 1fr) 185px; gap: 25px; margin-top: 22px; }
   .icon-search { padding-left: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; color: var(--muted); }
   .icon-search input { border: 0; }
@@ -139,17 +139,17 @@
   .icons button.selected { color: var(--highlight); border-color: var(--highlight); }
   .colors { flex-wrap: wrap; padding: 3px; }
   .colors > button { width: 23px; height: 23px; border-radius: 50%; color: var(--bg); padding: 0; display: grid; place-items: center; }
-  .colors label { flex-direction: row; align-items: center; color: var(--muted); font-size: 10px; }
+  .colors label { flex-direction: row; align-items: center; color: var(--muted); font-size: var(--font-caption); }
   .colors input { width: 30px; height: 28px; padding: 2px; }
-  .preview > span { display: block; font-size: 9px; letter-spacing: 1px; color: var(--muted); margin: 0 0 12px; }
+  .preview > span { display: block; font-size: var(--font-caption); letter-spacing: 1px; color: var(--muted); margin: 0 0 12px; }
   .form-actions { margin-top: 22px; justify-content: flex-end; }
   .review { margin-top: 24px; }
-  h4 { margin: 0; color: var(--text); font-weight: 500; font-size: 14px; }
-  dl { display: grid; grid-template-columns: 155px minmax(0,1fr); gap: 14px; padding: 20px 0; margin: 0; font-size: 12px; line-height: 1.7; }
+  h4 { margin: 0; color: var(--text); font-weight: 500; font-size: var(--font-title); }
+  dl { display: grid; grid-template-columns: 155px minmax(0,1fr); gap: 14px; padding: 20px 0; margin: 0; font-size: var(--font-body); line-height: 1.7; }
   dt { color: var(--muted); } dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
-  .error { color: var(--warning); font-size: 12px; line-height: 1.8; margin-top: 18px; }
-  .success { display: flex; align-items: flex-start; gap: 12px; color: var(--success); font-size: 13px; margin: 25px 0; }
+  .error { color: var(--warning); font-size: var(--font-body); line-height: 1.8; margin-top: 18px; }
+  .success { display: flex; align-items: flex-start; gap: 12px; color: var(--success); font-size: var(--font-title); margin: 25px 0; }
   .success a { display: block; color: var(--highlight); margin-top: 10px; }
-  .success p { color: var(--muted); font-size: 11px; line-height: 1.8; }
+  .success p { color: var(--muted); font-size: var(--font-small); line-height: 1.8; }
   @media(max-width:650px) { .service-setup { padding: 17px; } .login-fields, .fields, .appearance { grid-template-columns: 1fr; } .preview { max-width: 185px; } dl { grid-template-columns: 1fr; gap: 5px; } dd { margin-bottom: 12px; } .domain-input { flex-wrap: wrap; } .domain-input input { flex-basis: 100%; } }
 </style>

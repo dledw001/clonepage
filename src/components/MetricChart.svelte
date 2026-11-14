@@ -89,31 +89,32 @@
   .compact header { flex-wrap: wrap; gap: 10px; }
   .compact .chart-hint { display: none; }
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 27px; }
-  h2 { margin: 0; font-size: 14px; font-weight: 600; }
-  p { margin: 7px 0 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
-  .peak { white-space: nowrap; font-size: 9px; letter-spacing: 1px; color: var(--muted); }
+  h2 { margin: 0; font-size: var(--font-title); font-weight: 600; }
+  p { margin: 7px 0 0; font-size: var(--font-small); line-height: 1.6; color: var(--muted); }
+  .peak { white-space: nowrap; font-size: var(--font-caption); letter-spacing: .5px; color: var(--muted); }
   .peak strong { display: block; margin-top: 5px; text-align: right; color: var(--text); font-size: 19px; font-weight: 500; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
   .chart-body { display: flex; gap: 12px; }
-  .y-axis { display: flex; flex-direction: column; justify-content: space-between; width: 54px; flex-shrink: 0; height: 180px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+  .y-axis { display: flex; flex-direction: column; justify-content: space-between; width: 54px; flex-shrink: 0; height: 180px; color: var(--muted); font-size: var(--font-caption); font-variant-numeric: tabular-nums; text-align: right; }
   .plot-column { min-width: 0; flex: 1; }
   .plot { height: 180px; position: relative; outline-offset: 5px; outline-color: var(--highlight); }
   svg { display: block; width: 100%; height: 100%; overflow: visible; }
   .gridline { stroke: var(--line); stroke-dasharray: 3 5; vector-effect: non-scaling-stroke; }
-  .x-axis { margin-top: 12px; display: flex; justify-content: space-between; gap: 8px; font-size: 9px; color: var(--muted); }
+  .x-axis { margin-top: 12px; display: flex; justify-content: space-between; gap: 8px; font-size: var(--font-caption); color: var(--muted); }
   .x-axis span:nth-child(2) { text-align: center; }
   .x-axis span:last-child { text-align: right; }
-  .chart-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 22px; color: var(--muted); font-size: 9px; }
+  .chart-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 22px; color: var(--muted); font-size: var(--font-caption); }
   .legend-line { width: 15px; height: 2px; background: var(--highlight); }
   .legend-band { width: 15px; height: 8px; background: var(--highlight); opacity: .2; margin-left: 8px; }
-  .chart-hint { margin-left: auto; font-size: 9px; }
-  .chart-empty { min-height: 230px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--muted); font-size: 12px; }
+  .chart-hint { margin-left: auto; font-size: var(--font-caption); }
+  .chart-empty { min-height: 230px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--muted); font-size: var(--font-body); }
   .chart-error { color: var(--warning); margin: -13px 0 15px; }
   .cursor-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: .6; pointer-events: none; }
-  .chart-tooltip { position: absolute; z-index: 6; top: 12px; transform: translateX(-50%); min-width: 175px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: 0 8px 25px #0002; pointer-events: none; font-size: 10px; }
-  .chart-tooltip > strong { display: block; margin-bottom: 10px; color: var(--muted); font-size: 9px; font-weight: 500; }
+  .chart-tooltip { position: absolute; z-index: 6; top: 12px; transform: translateX(-50%); min-width: 175px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); box-shadow: 0 8px 25px #0002; pointer-events: none; font-size: var(--font-caption); }
+  .chart-tooltip > strong { display: block; margin-bottom: 10px; color: var(--muted); font-size: var(--font-caption); font-weight: 500; }
   .chart-tooltip div { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
   .chart-tooltip b { margin-left: auto; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .chart-tooltip small { display: block; margin: 3px 0 0 12px; color: var(--muted); font-size: 9px; }
+  .chart-tooltip small { display: block; margin: 3px 0 0 12px; color: var(--muted); font-size: var(--font-caption); }
   .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  @media (max-width: 540px) { .chart-card { padding: 20px 16px 17px; } .chart-hint { display: none; } .chart-tooltip { min-width: 145px; font-size: 9px; } .peak strong { font-size: 17px; } }
+  @media (max-width: 540px) { .chart-card { padding: 20px 16px 17px; } .chart-hint { display: none; } .chart-tooltip { min-width: 145px; font-size: var(--font-caption); } .peak strong { font-size: 17px; } }
+  .x-axis > span { min-width:0; overflow-wrap:anywhere; }
 </style>

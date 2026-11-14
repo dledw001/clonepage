@@ -124,39 +124,40 @@
   a:hover { text-decoration: underline; }
   .icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 30px; min-height: 32px; padding: 4px; border-radius: 7px; }
   .icon-button:hover { background: var(--surface-hover); color: var(--text); }
-  .list-footer a { display: flex; align-items: center; gap: 7px; font-size: 11px; }
+  .list-footer a { display: flex; align-items: center; gap: 7px; font-size: var(--font-small); }
   .toolbar { gap: 14px; flex-wrap: wrap; margin-top: 22px; }
   .tabs, .windows { gap: 3px; padding: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; }
-  .tabs button, .windows button { padding: 9px 12px; border-radius: 6px; font-size: 11px; }
+  .tabs button, .windows button { padding: 9px 12px; border-radius: 6px; font-size: var(--font-small); }
   button.active { background: var(--surface); color: var(--text); }
-  .hide-read { display: flex; gap: 7px; align-items: center; margin-left: auto; font-size: 11px; color: var(--muted); }
+  .hide-read { display: flex; gap: 7px; align-items: center; margin-left: auto; font-size: var(--font-small); color: var(--muted); }
   input { accent-color: var(--highlight); }
-  .scope-note, .footnote { color: var(--muted); font-size: 11px; line-height: 1.8; }
+  .scope-note, .footnote { color: var(--muted); font-size: var(--font-small); line-height: 1.8; }
   .scope-note { margin: 15px 0 5px; }
-  article { display: flex; align-items: flex-start; gap: 14px; padding: 21px 0; border-bottom: 1px solid var(--line); }
+  article { display: flex; align-items: flex-start; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--line); }
   article:first-child { margin-top: 8px; }
   .read-toggle { flex-shrink: 0; color: var(--highlight); }
   article.read .read-toggle, article.read .story-title a { color: var(--muted); }
   .story-info { min-width: 0; flex: 1; }
   .story-title { display: flex; gap: 8px; align-items: baseline; }
-  .position { color: var(--muted); font: 10px monospace; flex-shrink: 0; }
-  .story-title a { color: var(--text); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+  .position { color: var(--muted); font: var(--font-caption) monospace; flex-shrink: 0; }
+  .story-title a { color: var(--text); font-size: var(--font-title); line-height: 1.5; overflow-wrap: anywhere; }
   .story-title :global(svg) { margin-left: 6px; color: var(--muted); vertical-align: middle; }
-  .meta { flex-wrap: wrap; gap: 8px 13px; margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+  .meta { flex-wrap: wrap; gap: 8px 13px; margin-top: 8px; color: var(--muted); font-size: var(--font-caption); line-height: 1.7; }
   .meta a { display: inline-flex; align-items: center; gap: 5px; }
   .domain { overflow-wrap: anywhere; }
   .rank { padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; }
-  .save { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 8px; font-size: 11px; border: 1px solid var(--line); border-radius: 7px; }
+  .save { display: flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 7px 8px; font-size: var(--font-small); border: 1px solid var(--line); border-radius: 7px; }
   .save:hover { color: var(--highlight); background: var(--surface-hover); }
   .save.saved { color: var(--success); }
-  .list-footer { justify-content: space-between; gap: 15px; margin-top: 19px; color: var(--muted); font-size: 11px; }
-  .list-footer button, .empty button { color: var(--highlight); font-size: 11px; }
+  .list-footer { justify-content: space-between; gap: 15px; margin-top: 19px; color: var(--muted); font-size: var(--font-small); }
+  .list-footer button, .empty button { color: var(--highlight); font-size: var(--font-small); }
   .footnote { margin: 19px 0 0; }
-  .notice { color: var(--warning); padding: 12px 0; font-size: 12px; line-height: 1.7; }
-  .status { color: var(--success); font-size: 11px; line-height: 1.7; }
-  .empty { padding: 38px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+  .notice { color: var(--warning); padding: 12px 0; font-size: var(--font-body); line-height: 1.7; }
+  .status { color: var(--success); font-size: var(--font-small); line-height: 1.7; }
+  .empty { padding: 38px 12px; text-align: center; color: var(--muted); font-size: var(--font-title); }
   button:disabled { cursor: default; opacity: .55; }
   :is(a, button, input):focus-visible { outline: 2px solid var(--highlight); outline-offset: 4px; }
-  @media (max-width: 650px) { .hn-reader { padding: 22px 18px; } h1 { font-size:22px; } .header-actions { gap: 6px; } .toolbar { gap: 10px; } .tabs { width: 100%; justify-content: space-between; } .tabs button { padding: 9px; flex: 1; } article { gap: 8px; } .story-title a { font-size: 13px; } .save { padding: 8px; } .save span { display: none; } .hide-read { margin-left: auto; } }
+  @media (max-width: 650px) { .hn-reader { padding: 22px 18px; } h1 { font-size:22px; } .header-actions { gap: 6px; } .toolbar { gap: 10px; } .tabs { width: 100%; justify-content: space-between; } .tabs button { padding: 9px; flex: 1; } article { gap: 8px; } .story-title a { font-size: var(--font-title); } .save { padding: 8px; } .save span { display: none; } .hide-read { margin-left: auto; } }
   @media (hover: none) and (pointer: coarse) { .icon-button, .save, .tabs button, .windows button { min-width: 44px; min-height: 44px; } .hide-read { min-height: 44px; } }
+  .scope-note, .footnote { max-width:var(--measure); }
 </style>

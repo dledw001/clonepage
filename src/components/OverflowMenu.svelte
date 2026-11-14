@@ -43,11 +43,11 @@
   summary:focus-visible { outline:2px solid var(--highlight); outline-offset:3px; }
   .menu-panel { position:absolute; right:0; top:calc(100% + 6px); z-index:12; width:244px; max-width:calc(100vw - 44px); padding:8px; max-height:calc(100dvh - 32px); overflow-y:auto; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 36px rgba(0,0,0,.22); }
   .overflow-menu.upwards .menu-panel { top:auto; bottom:calc(100% + 6px); }
-  .menu-panel :global(button),.menu-panel :global(a) { display:flex; align-items:center; gap:9px; width:100%; padding:10px; border:0; border-radius:7px; background:transparent; color:var(--text); text-align:left; text-decoration:none; font:inherit; font-size:12px; line-height:1.5; cursor:pointer; }
+  .menu-panel :global(button),.menu-panel :global(a) { display:flex; align-items:center; gap:9px; width:100%; padding:10px; border:0; border-radius:7px; background:transparent; color:var(--text); text-align:left; text-decoration:none; font:inherit; font-size: var(--font-body); line-height:1.5; cursor:pointer; }
   .menu-panel :global(button:hover),.menu-panel :global(a:hover) { background:var(--surface-hover); }
   .menu-panel :global(button:disabled) { opacity:.45; cursor:default; }
   .menu-panel :global(.menu-danger) { color:var(--warning); }
-  .menu-panel :global(.menu-note) { display:block; padding:8px 10px; margin:0; color:var(--muted); font-size:11px; line-height:1.7; overflow-wrap:anywhere; }
+  .menu-panel :global(.menu-note) { display:block; padding:8px 10px; margin:0; color:var(--muted); font-size: var(--font-small); line-height:1.7; overflow-wrap:anywhere; }
   .menu-panel :global(hr) { border:0; border-top:1px solid var(--line); margin:6px 0; }
   .menu-panel :global(:is(a,button):focus-visible) { outline:2px solid var(--highlight); outline-offset:1px; }
   @media (hover:none) and (pointer:coarse) { summary { width:44px; height:44px; }.menu-panel :global(button),.menu-panel :global(a) { min-height:44px; } }
