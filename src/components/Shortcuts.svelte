@@ -251,7 +251,7 @@
 {#snippet card(item: Shortcut)}
   {@const Icon = shortcutIcon(item.icon)}
   <span class="shortcut-icon"><Icon size={iconSizes.shortcut} /></span>
-  <span class="shortcut-bottom"><span class="shortcut-name">{item.name}</span>{#if item.action === 'copy'}<Copy size={iconSizes.inline} class="shortcut-arrow" />{:else}<ArrowUpRight size={iconSizes.inline} class="shortcut-arrow" />{/if}</span>
+  <span class="shortcut-bottom"><span class="shortcut-name" title={item.name}>{item.name}</span>{#if item.action === 'copy'}<Copy size={iconSizes.inline} class="shortcut-arrow" />{:else}<ArrowUpRight size={iconSizes.inline} class="shortcut-arrow" />{/if}</span>
 {/snippet}
 
 {#snippet cards()}
@@ -369,7 +369,7 @@
                 </div>
               </div>
               <div class="preview"><span class="preview-label">CARD PREVIEW</span>
-                <div class="shortcut-card" style={`--accent:${draft.color}`}><span class="shortcut-icon"><PreviewIcon size={iconSizes.shortcut} /></span><span class="shortcut-bottom"><span class="shortcut-name">{draft.name || 'Your shortcut'}</span>{#if draft.action === 'copy'}<Copy size={iconSizes.inline} class="shortcut-arrow" />{:else}<ArrowUpRight size={iconSizes.inline} class="shortcut-arrow" />{/if}</span></div>
+                <div class="shortcut-card" style={`--accent:${draft.color}`}><span class="shortcut-icon"><PreviewIcon size={iconSizes.shortcut} /></span><span class="shortcut-bottom"><span class="shortcut-name" title={draft.name || 'Your shortcut'}>{draft.name || 'Your shortcut'}</span>{#if draft.action === 'copy'}<Copy size={iconSizes.inline} class="shortcut-arrow" />{:else}<ArrowUpRight size={iconSizes.inline} class="shortcut-arrow" />{/if}</span></div>
                 <p>{draft.description || (draft.action === 'copy' ? 'Copies text to your clipboard' : 'Opens in a new tab')}</p>
               </div>
             </div>
@@ -420,9 +420,7 @@
 
   .shortcut-groups { display: grid; gap: 23px; }
   .shortcut-group { min-width: 0; }
-  .grouped .shortcut-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  @media (max-width: 850px) { .grouped .shortcut-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (max-width: 540px) { .grouped .shortcut-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .grouped .shortcut-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr)); }
   .group-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; }
   .group-heading h3 { min-width: 0; overflow-wrap: anywhere; margin: 0; font-size: var(--font-body); font-weight: 600; color: var(--text); }
   .group-heading > span { color: var(--muted); font-size: var(--font-caption); }
@@ -504,5 +502,4 @@
   .shortcut-error { color: var(--warning); }
   .shortcut-error button { color: var(--highlight); margin-left: 12px; }
   @media (max-width: 650px) { .manager-heading { align-items: flex-start; gap: 15px; } .shortcut-manager { padding: 18px; } .shortcut-editor { padding: 16px; } .editor-fields { grid-template-columns: 1fr; } .appearance { grid-template-columns: 1fr; gap: 20px; } .preview { max-width: 210px; } .row-actions { gap: 0; } .small-icon { padding: 7px 5px; } }
-  @media (max-width:360px) { .grouped .shortcut-grid { grid-template-columns:minmax(0,1fr); } }
 </style>

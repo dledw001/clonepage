@@ -18,8 +18,11 @@ keep their independent reader styles; their surrounding controls use this scale.
 Feed excerpts and reading-list search snippets use `--measure: 72ch` inside the
 existing aligned cards. Titles use 1.5 line spacing; paragraphs generally use
 1.6–1.7. Slightly tighter list/header spacing balances the larger text. Shortcut
-names can wrap, with flexible card height so long names are not clipped. At
-360px and below, shortcuts use one column to keep names readable.
+names wrap at spaces, with a reserved two-line title area to keep rows aligned.
+The grid uses an 11rem minimum card width and reduces its column count as needed,
+including on phones. A single card can shrink to its container width. Unusually
+long unbroken words truncate instead of splitting or overflowing; the full title
+is available on hover and remains the accessible shortcut name.
 
 Light mode uses `#5d6774` for secondary text: approximately 5.45:1 against the
 card surface, 4.94:1 against the page, and 4.68:1 against hover surfaces. Link,
