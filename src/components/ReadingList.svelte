@@ -5,7 +5,7 @@
     import SectionHeader from './SectionHeader.svelte';
     import OverflowMenu from './OverflowMenu.svelte';
     import DocumentUpload from './DocumentUpload.svelte';
-    import { Archive, ArchiveRestore, ArrowUpRight, Check, Circle, CircleCheck, Pencil, Plus, RefreshCw, Search, Trash2, Upload, Download, X } from '@lucide/svelte';
+    import { Archive, ArchiveRestore, ArrowUpRight, Check, Circle, CircleCheck, Pencil, Plus, RefreshCw, Search, Trash2, Upload, Download, Bookmark, X } from '@lucide/svelte';
 
     let { active = true, previewCount = 3, onnavigate }: { active?: boolean; previewCount?: number; onnavigate?: (event: MouseEvent, path: string) => void } = $props();
 
@@ -16,15 +16,16 @@
         source_kind?: 'url' | 'upload';
         upload_filename?: string | null;
         hn_discussion_url?: string | null;
+        bookmark_only: boolean;
         is_read: boolean;
         saved_at: string;
         archived_at: string | null;
-        index_status: 'pending' | 'processing' | 'ready' | 'failed';
+        index_status: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped';
         indexed_at: string | null;
         index_error: string | null;
         index_attempts: number;
         index_retry_at: string | null;
-        copy_status: 'pending' | 'processing' | 'ready' | 'failed';
+        copy_status: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped';
         copy_available: boolean;
         copy_saved_at: string | null;
         copy_format: 'html' | 'pdf' | null;
@@ -239,8 +240,8 @@
         window.addEventListener('focus', onFocus);
         window.addEventListener('clonepage:reading-changed', onChanged);
         const capturePoll = setInterval(() => {
-            if (active && !document.hidden && articles.some(article => article.copy_status === 'pending' || article.copy_status === 'processing'
-                || article.copy_retry_at || article.index_status === 'pending' || article.index_status === 'processing' || article.index_retry_at)) void refresh();
+            if (active && !document.hidden && articles.some(article => !article.bookmark_only && (article.copy_status === 'pending' || article.copy_status === 'processing'
+                || article.copy_retry_at || article.index_status === 'pending' || article.index_status === 'processing' || article.index_retry_at))) void refresh();
         }, 5000);
 
         return () => {
@@ -382,6 +383,10 @@
             busyIds = busyIds.filter(id => id !== article.id);
             finishWrite();
         }
+    }
+
+    async function setBookmarkOnly(article: Article, bookmarkOnly: boolean) {
+        await patch(article, { bookmark_only: bookmarkOnly });
     }
 
     async function retryIndexing(article: Article) {
@@ -648,16 +653,19 @@
                             {#if article.copy_available}
                                 <a href={`/reading/${article.id}`} onclick={event => onnavigate?.(event, `/reading/${article.id}`)}>{article.copy_format === 'pdf' && article.reading_progress ? `Continue · page ${article.reading_progress.page} of ${article.reading_progress.page_count}` : article.copy_format === 'html' && article.html_reading_progress && article.html_reading_progress.fraction > .02 && article.html_reading_progress.fraction < .98 ? `Continue · ${Math.round(article.html_reading_progress.fraction*100)}%` : 'Read saved copy'}</a>
                             {/if}
-                            {#if article.copy_status === 'pending' || article.copy_status === 'processing'}
+                            {#if article.bookmark_only}
+                                <span>Bookmark only</span>
+                            {:else if article.copy_status === 'pending' || article.copy_status === 'processing'}
                                 <span>{article.copy_available ? 'Refreshing saved copy...' : 'Saving copy...'}</span>
                             {:else if article.copy_status === 'failed'}
                                 <span class="copy-error" title={article.copy_error ?? undefined}>{article.copy_available ? 'Refresh failed; previous copy kept.' : 'Saved copy unavailable.'}</span>
                                 <button disabled={busyIds.includes(article.id)} onclick={() => retryCopy(article)}>Retry saved copy</button>
+                                {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)} onclick={() => setBookmarkOnly(article, true)}>Keep as bookmark</button>{/if}
                             {:else if article.copy_available}
                                 {#if article.copy_warning || article.copy_is_legacy}<span title={article.copy_warning ?? undefined}>{article.copy_is_legacy ? 'Recovered text copy' : 'Saved with a note'}</span>{/if}
                             {/if}
                         </div>
-                        {#if article.index_status === 'failed'}
+                        {#if !article.bookmark_only && article.index_status === 'failed'}
                             <small class="index-error" title={article.index_error ?? undefined}>
                                 Content search unavailable.
                                 {#if article.index_retry_at}Retry scheduled.{/if}
@@ -666,6 +674,7 @@
                                         disabled={busyIds.includes(article.id)}
                                         onclick={() => retryIndexing(article)}
                                 >Retry now</button>
+                                {#if article.source_kind !== 'upload' && article.copy_status !== 'failed'}<button class="retry-indexing" disabled={busyIds.includes(article.id)} onclick={() => setBookmarkOnly(article, true)}>Keep as bookmark</button>{/if}
                             </small>
                         {/if}
                         {#if search.trim() && article.snippet}
@@ -681,8 +690,16 @@
                                 <a href={`/api/reading/${article.id}/copy/download`}><Download size={iconSizes.action}/>Download {article.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>
                                 <p class="menu-note">{article.copy_is_legacy ? 'Recovered text copy' : 'Copy saved'}{article.copy_saved_at ? ` · ${new Date(article.copy_saved_at).toLocaleDateString()}` : ''}{article.copy_warning ? ` · ${article.copy_warning}` : ''}</p>
                             {/if}
-                            {#if article.source_kind !== 'upload'}<button disabled={busyIds.includes(article.id)||article.copy_status==='pending'||article.copy_status==='processing'} onclick={() => retryCopy(article)}><RefreshCw size={iconSizes.action}/>{article.copy_status==='failed' ? 'Retry saved copy' : 'Refresh saved copy'}</button>{/if}
-                            {#if article.index_status === 'pending' || article.index_status === 'processing'}<p class="menu-note">Preparing content search…</p>{/if}
+                            {#if article.source_kind !== 'upload'}
+                                {#if article.bookmark_only}
+                                    <button disabled={busyIds.includes(article.id)} onclick={() => setBookmarkOnly(article, false)}><RefreshCw size={iconSizes.action}/>Enable saved copy</button>
+                                    <p class="menu-note">Automatic fetching and content indexing are off.</p>
+                                {:else}
+                                    <button disabled={busyIds.includes(article.id)||article.copy_status==='pending'||article.copy_status==='processing'} onclick={() => retryCopy(article)}><RefreshCw size={iconSizes.action}/>{article.copy_status==='failed' ? 'Retry saved copy' : 'Refresh saved copy'}</button>
+                                    <button disabled={busyIds.includes(article.id)} onclick={() => setBookmarkOnly(article, true)}><Bookmark size={iconSizes.action}/>Keep as bookmark</button>
+                                {/if}
+                            {/if}
+                            {#if !article.bookmark_only && (article.index_status === 'pending' || article.index_status === 'processing')}<p class="menu-note">Preparing content search…</p>{/if}
                             <hr/>
                             <button disabled={busyIds.includes(article.id)} onclick={() => startEditing(article)}><Pencil size={iconSizes.action}/>Edit title</button>
                             <button disabled={busyIds.includes(article.id)} onclick={() => toggleArchive(article)}>{#if tab === 'queue'}<Archive size={iconSizes.action}/>Archive{:else}<ArchiveRestore size={iconSizes.action}/>Restore{/if}</button>

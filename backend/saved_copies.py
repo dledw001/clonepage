@@ -323,16 +323,21 @@ def get_copy(article_id: str):
         except ValueError:
             pass
     return {"id": row["id"], "title": row["title"], "url": row["url"], "copy_available": available,
-            "source_kind": row["source_kind"], "upload_filename": row["upload_filename"],
+            "source_kind": row["source_kind"], "upload_filename": row["upload_filename"], "bookmark_only": bool(row["bookmark_only"]),
             **{name.strip(): row[name.strip()] for name in COPY_COLUMNS.split(",")}}
 
 
 @router.post("/{article_id}/copy/refresh", status_code=202)
 def refresh_copy(article_id: str):
-    row = copy_row(article_id)
-    if row["source_kind"] == "upload":
-        raise HTTPException(409, "Uploaded PDFs have no website to refresh. Upload the document again if its file is missing.")
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute("SELECT source_kind,bookmark_only FROM articles WHERE id=?", (article_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Article not found")
+        if row["bookmark_only"]:
+            raise HTTPException(409, "Enable saved copy before refreshing a bookmark.")
+        if row["source_kind"] == "upload":
+            raise HTTPException(409, "Uploaded PDFs have no website to refresh. Upload the document again if its file is missing.")
         # Refresh is explicit; keep the last successful file during collection.
         # language=SQL
         refresh_copy_sql = """

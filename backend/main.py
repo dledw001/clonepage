@@ -37,7 +37,7 @@ DB_PATH = Path(
 
 ARTICLE_COLUMNS = (
     "id, title, url, is_read, saved_at, archived_at, "
-    "index_status, indexed_at, index_error, index_attempts, index_retry_at, hn_story_id, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS + ", " + HTML_PROGRESS_COLUMNS
+    "index_status, indexed_at, index_error, index_attempts, index_retry_at, hn_story_id, bookmark_only, " + COPY_COLUMNS + ", " + UPLOAD_COLUMNS + ", " + PROGRESS_COLUMNS + ", " + HTML_PROGRESS_COLUMNS
 )
 
 
@@ -84,6 +84,7 @@ def initialize_search():
 
         migrations = {
             "content": "TEXT",
+            "bookmark_only": "INTEGER NOT NULL DEFAULT 0",
             "index_status": "TEXT NOT NULL DEFAULT 'pending'",
             "index_error": "TEXT",
             "indexed_at": "TEXT",
@@ -313,6 +314,7 @@ class ArticleCreate(BaseModel):
 
 
 class ArticleUpdate(BaseModel):
+    bookmark_only: bool | None = None
     is_read: bool | None = None
     archived: bool | None = None
     title: str | None = Field(default=None, max_length=200)
@@ -325,6 +327,7 @@ def serialize(row):
     article["html_reading_progress"] = html_progress_for(article)
     for name in (*PROGRESS_NAMES, *HTML_PROGRESS_NAMES):
         article.pop(name, None)
+    article["bookmark_only"] = bool(article.get("bookmark_only"))
     article["is_read"] = bool(article["is_read"])
     article["copy_available"] = bool(article.get("copy_saved_at"))
     article["copy_is_legacy"] = bool(article.get("copy_is_legacy"))
@@ -427,9 +430,29 @@ def update_article(article_id: str, update: ArticleUpdate):
         values.append(update.title.strip())
         assignments.append("title_source = 'manual'")
 
-    values.append(article_id)
-
     with database() as db:
+        db.execute("BEGIN IMMEDIATE")
+        current = db.execute("SELECT bookmark_only,source_kind FROM articles WHERE id=?", (article_id,)).fetchone()
+        if current is None:
+            raise HTTPException(404, "Article not found")
+        if "bookmark_only" in changes:
+            if update.bookmark_only is None:
+                raise HTTPException(422, "bookmark_only cannot be null")
+            if current["source_kind"] == "upload":
+                raise HTTPException(409, "Uploaded PDFs cannot be kept as website bookmarks.")
+            if bool(current["bookmark_only"]) != update.bookmark_only:
+                # Invalidate both job tokens so an in-flight worker cannot publish
+                # over this choice. Retain any existing snapshot and search text.
+                assignments.extend([
+                    "bookmark_only=?", "index_status=?", "copy_status=?",
+                    "index_error=NULL", "copy_error=NULL", "index_retry_at=NULL", "copy_retry_at=NULL",
+                    "index_attempts=0", "copy_attempts=0", "article_job=NULL", "copy_job=NULL",
+                ])
+                status = "skipped" if update.bookmark_only else "pending"
+                values.extend([int(update.bookmark_only), status, status])
+        if not assignments:
+            return serialize(db.execute(f"SELECT {ARTICLE_COLUMNS} FROM articles WHERE id=?", (article_id,)).fetchone())
+        values.append(article_id)
         # language=SQL
         update_article_sql = f"""
         UPDATE articles
@@ -461,7 +484,7 @@ def retry_article(article_id: str):
             index_error = NULL,
             index_attempts = 0,
             index_retry_at = NULL
-        WHERE id = ? AND index_status = 'failed'
+        WHERE id = ? AND index_status = 'failed' AND bookmark_only=0
         """
         result = db.execute(retry_article_sql, (article_id,))
         row = db.execute(
@@ -470,6 +493,8 @@ def retry_article(article_id: str):
 
         if row is None:
             raise HTTPException(404, "Article not found")
+        if row["bookmark_only"]:
+            raise HTTPException(409, "Enable saved copy before retrying a bookmark.")
         if result.rowcount == 0:
             raise HTTPException(409, "Article is not waiting for a retry")
 

@@ -157,7 +157,7 @@ async def needs_attention(request: Request, response: Response):
     with database() as db:
         names = {row['id']: row['name'] for row in db.execute('SELECT id,name FROM shortcuts')}
         feeds = [dict(row) for row in db.execute("SELECT id,title,error,last_success_at FROM feed_subscriptions WHERE error IS NOT NULL AND error!='' ORDER BY title")]
-        copies = [dict(row) for row in db.execute("SELECT id,title,copy_error,copy_saved_at FROM articles WHERE copy_status='failed' AND archived_at IS NULL ORDER BY saved_at DESC")]
+        copies = [dict(row) for row in db.execute("SELECT id,title,copy_error,copy_saved_at FROM articles WHERE bookmark_only=0 AND copy_status='failed' AND archived_at IS NULL ORDER BY saved_at DESC")]
     waiting = 0
     for reading in availability['readings']:
         if reading['stale'] or reading['state'] == 'unknown':

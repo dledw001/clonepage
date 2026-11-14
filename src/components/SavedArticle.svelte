@@ -7,7 +7,7 @@
   import { ArrowLeft, ArrowUpRight, Download, RefreshCw } from '@lucide/svelte';
 
   let { articleId, theme, onback }: { articleId: string; theme: 'light' | 'dark'; onback?: (event: MouseEvent) => void } = $props();
-  type SavedCopy = { source_kind?: 'url' | 'upload'; upload_filename?: string | null; id: string; title: string; url: string; copy_available: boolean; copy_status: string;
+  type SavedCopy = { bookmark_only?: boolean; source_kind?: 'url' | 'upload'; upload_filename?: string | null; id: string; title: string; url: string; copy_available: boolean; copy_status: string;
     copy_saved_at: string | null; copy_format: 'html' | 'pdf' | null; copy_size: number | null;
     copy_error: string | null; copy_warning: string | null; copy_retry_at: string | null };
   let info = $state<SavedCopy | null>(null);
@@ -188,7 +188,7 @@
       {#if info.copy_available}<a class="primary" href={`/api/reading/${articleId}/copy/download`}><Download size={iconSizes.action} />Download {info.copy_format === 'pdf' ? 'PDF' : 'HTML'}</a>{/if}
       {#if info.source_kind !== 'upload'}
         <a href={info.url} target="_blank" rel="noopener noreferrer">Open original<ArrowUpRight size={iconSizes.inline} /></a>
-        <button disabled={refreshing || pending} onclick={refreshCopy}><RefreshCw size={iconSizes.action} />{pending || refreshing ? 'Saving copy...' : info.copy_available ? 'Refresh saved copy' : 'Retry saved copy'}</button>
+        {#if !info.bookmark_only}<button disabled={refreshing || pending} onclick={refreshCopy}><RefreshCw size={iconSizes.action} />{pending || refreshing ? 'Saving copy...' : info.copy_available ? 'Refresh saved copy' : 'Retry saved copy'}</button>{/if}
       {/if}
     </div>{/if}
     {#if info?.upload_filename}<p>{info.upload_filename}</p>{/if}
@@ -207,7 +207,7 @@
     {/if}
     <p class="hint">This copy is stored on your NAS. Download it to read without a connection to the NAS.</p>
   {:else if loading}<div class="empty">Loading saved copy...</div>
-  {:else if info && !pending && info.copy_status !== 'failed'}<div class="empty">{info.source_kind === 'upload' ? 'The uploaded PDF is missing. Upload the same file again to restore it.' : 'The saved file is unavailable. Use Retry saved copy to retrieve it again.'}</div>{/if}
+  {:else if info && !pending && info.copy_status !== 'failed'}<div class="empty">{info.bookmark_only ? 'This item is kept as a bookmark. Open the original, or enable saved copy from the reading-list menu.' : info.source_kind === 'upload' ? 'The uploaded PDF is missing. Upload the same file again to restore it.' : 'The saved file is unavailable. Use Retry saved copy to retrieve it again.'}</div>{/if}
 </section>
 
 <style>

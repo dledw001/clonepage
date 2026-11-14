@@ -14,7 +14,7 @@ const declarations = tree.statements.filter(node => !ts.isImportDeclaration(node
 const body = declarations.map(node => node.getText(tree)).join('\n');
 const expose = `
 return {
-    refresh, patch, remove, retryIndexing, save, uploadDocument, startEditing, saveTitle,
+    refresh, patch, setBookmarkOnly, remove, retryIndexing, save, uploadDocument, startEditing, saveTitle,
     seed(value) { articles = value; },
     setForm(nextUrl, nextTitle) { url = nextUrl; title = nextTitle; },
     setDraft(value) { titleDraft = value; },
@@ -254,4 +254,54 @@ test('a stale list refresh cannot erase a newly uploaded PDF', async () => {
     await refresh;
     await settle();
     assert.equal(c.state().articles[0].id, 'upload');
+});
+
+
+test('bookmark choice waits for the API and keeps the original state if saving fails', async () => {
+    const pending = deferred();
+    const c = createComponent((url, options) => {
+        assert.equal(url, '/api/reading/a');
+        assert.equal(options.method, 'PATCH');
+        assert.deepEqual(JSON.parse(options.body), { bookmark_only: true });
+        return pending.promise;
+    });
+    c.seed([article('a', { copy_status: 'failed', bookmark_only: false })]);
+    const write = c.setBookmarkOnly(article('a'), true);
+    assert.equal(c.state().articles[0].bookmark_only, false);
+    assert.deepEqual(c.state().busyIds, ['a']);
+    pending.resolve(response(null, 500));
+    await write;
+    assert.equal(c.state().articles[0].bookmark_only, false);
+    assert.equal(c.state().articles[0].copy_status, 'failed');
+    assert.deepEqual(c.state().busyIds, []);
+    assert.match(c.state().error, /Could not update/);
+});
+
+test('a stale refresh cannot restore warnings after keeping a bookmark', async () => {
+    const old = deferred();
+    let reads = 0;
+    const saved = article('a', { bookmark_only: true, copy_status: 'skipped', index_status: 'skipped', copy_error: null, index_error: null });
+    const c = createComponent((url, options) => options?.method === 'PATCH'
+        ? Promise.resolve(response(saved)) : ++reads === 1 ? old.promise : Promise.resolve(response([saved])));
+    const failed = article('a', { bookmark_only: false, copy_status: 'failed', index_status: 'failed' });
+    c.seed([failed]);
+    const refresh = c.refresh();
+    await c.setBookmarkOnly(failed, true);
+    old.resolve(response([failed]));
+    await refresh;
+    await settle();
+    assert.equal(c.state().articles[0].bookmark_only, true);
+    assert.equal(c.state().articles[0].copy_status, 'skipped');
+});
+
+test('enabling saved copy applies the returned queued state', async () => {
+    const c = createComponent(async (url, options) => {
+        assert.deepEqual(JSON.parse(options.body), { bookmark_only: false });
+        return response(article('a', { bookmark_only: false, copy_status: 'pending', index_status: 'pending' }));
+    });
+    c.seed([article('a', { bookmark_only: true })]);
+    await c.setBookmarkOnly(article('a'), false);
+    assert.equal(c.state().articles[0].bookmark_only, false);
+    assert.equal(c.state().articles[0].copy_status, 'pending');
+    assert.deepEqual(c.state().busyIds, []);
 });

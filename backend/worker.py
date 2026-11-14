@@ -61,7 +61,7 @@ def wait_for_schema(stop_requested: ShutdownRequest) -> bool:
                 db.execute(check_index_schema_sql)
                 db.execute("SELECT rowid FROM article_fts LIMIT 0")
                 db.execute("SELECT id FROM feed_subscriptions LIMIT 0")
-                db.execute("SELECT copy_status,article_job,source_kind,upload_filename FROM articles LIMIT 0")
+                db.execute("SELECT copy_status,article_job,source_kind,upload_filename,bookmark_only FROM articles LIMIT 0")
             return True
         except Exception:
             logging.info("Waiting for database initialization...")
@@ -105,7 +105,7 @@ def process_next() -> bool:
         # language=SQL
         select_job_sql = """
         SELECT * FROM articles
-        WHERE index_status!='processing' AND copy_status!='processing' AND (
+        WHERE bookmark_only=0 AND index_status!='processing' AND copy_status!='processing' AND (
             index_status='pending' OR (index_status='failed' AND index_attempts<? AND (index_retry_at IS NULL OR index_retry_at<=?))
             OR copy_status='pending' OR (copy_status='failed' AND copy_attempts<? AND (copy_retry_at IS NULL OR copy_retry_at<=?))
         )
@@ -259,7 +259,7 @@ def main():
             recover_interrupted_jobs_sql = """
             UPDATE articles SET index_status='pending',article_job=NULL,
                 copy_status=CASE WHEN copy_status='processing' THEN 'pending' ELSE copy_status END,copy_job=NULL
-            WHERE index_status='processing' OR copy_status='processing'
+            WHERE bookmark_only=0 AND (index_status='processing' OR copy_status='processing')
             """
             db.execute(recover_interrupted_jobs_sql)
 

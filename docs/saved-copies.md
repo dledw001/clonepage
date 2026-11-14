@@ -69,3 +69,18 @@ image embedding, scanned PDFs, retries, deletion races, and legacy text recovery
 ## Reading continuity
 
 Saved HTML articles now synchronize reading position across devices and appear alongside PDFs in Continue reading. See [homepage.md](homepage.md) for behavior, settings, and the article-progress API.
+
+## Bookmarks without capture
+
+Choose **Keep as bookmark** in a URL item's menu or beside a capture/indexing
+failure to stop automatic fetching and indexing. Both statuses become `skipped`,
+retry times and errors are cleared, and the item no longer appears as a failed
+saved copy in Needs attention. The choice is stored on the NAS for every device.
+
+Title/URL search, read/archive state, HN discussion links, and any existing saved
+copy/search text are preserved. Active jobs are invalidated; an HTTP request
+already in progress may finish, but cannot publish its result. **Enable saved
+copy** queues a fresh capture and index with reset attempts. Repeat requests for
+the current mode do not interrupt a job or requeue work. Direct retry endpoints
+reject bookmark-only items until capture is enabled. Uploaded PDFs keep their
+existing local-file workflow and cannot be switched to bookmark mode.
