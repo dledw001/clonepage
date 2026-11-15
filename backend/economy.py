@@ -42,6 +42,7 @@ class Indicator:
 INDICATORS = (
     Indicator("UNRATE", "Unemployment rate", "Labor market", "Monthly", "U.S. Bureau of Labor Statistics", "Seasonally adjusted", "unemployment", "%", "Unemployment rate", "A rising rate generally signals a weakening labor market.", "Trend: the latest three-month average minus the preceding three-month average, in percentage points."),
     Indicator("ICSA", "Initial jobless claims", "Labor market", "Weekly", "U.S. Employment and Training Administration", "Seasonally adjusted", "claims", "claims", "Four-week moving average", "Rising claims generally indicate more layoffs and labor-market stress.", "Mean of four consecutive weekly observations. Change compares with the prior week's four-week average."),
+    Indicator("CPIAUCSL", "CPI inflation", "Inflation & growth", "Monthly", "U.S. Bureau of Labor Statistics", "Seasonally adjusted", "yoy", "%", "All items · year-over-year inflation", "Headline CPI measures price changes for urban consumers, including food and energy. Rising inflation means faster price growth, not necessarily rising purchasing power; interpretation depends on the broader context.", "Both rates use seasonally adjusted CPI-U all-items index levels. YoY = 100 × (index / index 12 months earlier − 1). Three-month annualized = 100 × ((index / index 3 months earlier)^4 − 1). Change is YoY inflation versus the prior month, in percentage points."),
     Indicator("PCEPILFE", "Core PCE inflation", "Inflation & growth", "Monthly", "U.S. Bureau of Economic Analysis", "Seasonally adjusted", "yoy", "%", "Year-over-year inflation", "A rising inflation rate means faster price growth; its significance depends on the broader context.", "YoY = 100 × (index / index 12 months earlier − 1). Three-month annualized = 100 × ((index / index 3 months earlier)^4 − 1). Change is YoY inflation versus the prior month."),
     Indicator("GDPC1", "Real GDP growth", "Inflation & growth", "Quarterly", "U.S. Bureau of Economic Analysis", "Seasonally adjusted annual rate", "gdp", "%", "Quarter-over-quarter, annualized", "Rising growth generally indicates stronger economic activity.", "100 × ((real GDP / real GDP one quarter earlier)^4 − 1). The underlying level is already at an annual rate; growth is not multiplied by four again. Change compares growth with the prior quarter."),
     Indicator("IPMAN", "Manufacturing production", "Inflation & growth", "Monthly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "yoy", "%", "Year-over-year growth", "Rising growth generally indicates strengthening manufacturing activity.", "100 × (manufacturing industrial production index / index 12 months earlier − 1). Change compares YoY growth with the prior month."),
@@ -146,7 +147,7 @@ def transformed(indicator, observations):
         day, value = date.fromisoformat(row["date"]), row["value"]
         secondary = None
         if indicator.transform == "yoy":
-            if indicator.id == "PCEPILFE":
+            if indicator.id in ("PCEPILFE", "CPIAUCSL"):
                 secondary = growth(value, values.get(months_before(day, 3).isoformat()), 4)
             value = growth(value, values.get(months_before(day, 12).isoformat()))
         elif indicator.transform == "gdp":
@@ -227,6 +228,7 @@ def present(indicator, row, now):
             "provider": indicator.provider, "source_label": "New York Fed" if indicator.provider == "nyfed" else "FRED",
             "source_url": SOURCE_PAGE if indicator.provider == "nyfed" else FRED + "/series/" + indicator.id,
             "source_data_url": row.get("source_data_url"), "source_published_month": row.get("source_published_month"), "latest": latest, "change": change,
+            "latest_secondary": next((point for point in reversed(points) if point["secondary"] is not None), None),
             "drawdown": equity_drawdown(latest, points) if indicator.transform == "equity" else None,
             "points": history, "checked_at": row.get("checked_at"), "fetched_at": row.get("fetched_at"),
             "fred_updated_at": row.get("fred_updated_at"), "next_check_at": row.get("next_check_at"),

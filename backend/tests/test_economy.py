@@ -50,8 +50,8 @@ def auto_workbook(rows=None):
 
 
 class CalculationTests(unittest.TestCase):
-    def test_allowlist_contains_exactly_seventeen_requested_series(self):
-        self.assertEqual(set(BY_ID), set('UNRATE ICSA PCEPILFE GDPC1 DGS10 MORTGAGE30US DSPIC96 DRCCLACBS BAMLH0A0HYM2 T10Y2Y IPMAN SP500 VIXCLS DRSFRMACBS TDSP PSAVERT NYFED_AUTO90'.split()))
+    def test_allowlist_contains_exactly_eighteen_requested_series(self):
+        self.assertEqual(set(BY_ID), set('UNRATE ICSA CPIAUCSL PCEPILFE GDPC1 DGS10 MORTGAGE30US DSPIC96 DRCCLACBS BAMLH0A0HYM2 T10Y2Y IPMAN SP500 VIXCLS DRSFRMACBS TDSP PSAVERT NYFED_AUTO90'.split()))
 
     def test_market_group_contains_equities_volatility_and_credit_risk(self):
         self.assertEqual([item.id for item in INDICATORS if item.group == 'Market conditions'], ['SP500', 'VIXCLS', 'BAMLH0A0HYM2'])
@@ -117,18 +117,43 @@ class CalculationTests(unittest.TestCase):
 
     def test_yoy_and_three_month_annualized_use_levels_and_distinct_bases(self):
         observations = raw(('2025-09-01', 100), ('2026-05-01', 102), ('2026-06-01', 103), ('2026-08-01', 104), ('2026-09-01', 105))
-        card = snapshot('PCEPILFE', observations)
-        self.assertAlmostEqual(card['latest']['value'], 5)
-        self.assertAlmostEqual(card['latest']['secondary'], 100 * ((105 / 103) ** 4 - 1))
-        self.assertIsNone(card['change']['value'])  # no August 2025 base
+        for series in ('PCEPILFE', 'CPIAUCSL'):
+            with self.subTest(series=series):
+                card = snapshot(series, observations)
+                self.assertAlmostEqual(card['latest']['value'], 5)
+                self.assertAlmostEqual(card['latest']['secondary'], 100 * ((105 / 103) ** 4 - 1))
+                self.assertIsNone(card['change']['value'])  # no August 2025 base
         for series in ('DSPIC96', 'IPMAN'):
             self.assertAlmostEqual(snapshot(series, observations)['latest']['value'], 5)
 
     def test_missing_month_is_not_replaced_by_twelfth_previous_available_row(self):
         observations = [{'date': months_before(date(2026, 10, 1), i).isoformat(), 'value': 100 + i} for i in range(14) if i != 12]
-        points = transformed(BY_ID['PCEPILFE'], sorted(observations, key=lambda item:item['date']))
-        self.assertIsNone(points[-1]['value'])
-        self.assertIsNotNone(points[-1]['secondary'])
+        for series in ('PCEPILFE', 'CPIAUCSL'):
+            with self.subTest(series=series):
+                points = transformed(BY_ID[series], sorted(observations, key=lambda item:item['date']))
+                self.assertIsNone(points[-1]['value'])
+                self.assertIsNotNone(points[-1]['secondary'])
+
+    def test_headline_cpi_uses_index_growth_and_changes_in_inflation_not_index_points(self):
+        card = snapshot('CPIAUCSL', raw(('2025-09-01', 100), ('2025-10-01', 101), ('2026-07-01', 102), ('2026-09-01', 105), ('2026-10-01', 106)))
+        self.assertAlmostEqual(card['latest']['value'], 100 * (106 / 101 - 1))
+        self.assertAlmostEqual(card['latest']['secondary'], 100 * ((106 / 102) ** 4 - 1))
+        self.assertAlmostEqual(card['change']['value'], 100 * (106 / 101 - 1) - 5)
+        self.assertEqual(card['change']['unit'], 'pp')
+        self.assertEqual(card['change']['comparison_date'], '2026-09-01')
+        self.assertEqual(card['source_url'], 'https://fred.stlouisfed.org/series/CPIAUCSL')
+        self.assertIn('All items', card['basis'])
+        missing = snapshot('CPIAUCSL', raw(('2025-10-01', 101), ('2026-10-01', 106)))
+        self.assertIsNone(missing['latest']['secondary'])
+        self.assertIsNotNone(missing['latest']['value'])
+
+    def test_missing_year_ago_cpi_keeps_gap_and_dates_the_newest_three_month_rate_separately(self):
+        card = snapshot('CPIAUCSL', raw(('2025-09-01', 100), ('2025-10-01', None), ('2026-06-01', 102), ('2026-07-01', 103), ('2026-09-01', 105), ('2026-10-01', 106)))
+        self.assertEqual(card['latest']['date'], '2026-09-01')
+        self.assertEqual(card['latest_secondary']['date'], '2026-10-01')
+        self.assertAlmostEqual(card['latest_secondary']['secondary'], 100 * ((106 / 103) ** 4 - 1))
+        self.assertIsNone(card['points'][-1]['value'])
+        self.assertIsNotNone(card['points'][-1]['secondary'])
 
     def test_quarterly_gdp_is_compounded_and_not_multiplied_twice(self):
         card = snapshot('GDPC1', raw(('2026-01-01', 100), ('2026-04-01', 101), ('2026-07-01', 103)))
@@ -286,19 +311,32 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.row('VIXCLS')['observations'])
         self.assertEqual(self.row('UNRATE'), original)
 
-    async def test_household_upgrade_preserves_existing_thirteen_series(self):
+    async def test_household_upgrade_preserves_existing_cached_series(self):
         await self.gateway.refresh_due()
         original = self.row('SP500')
         new_ids = ('DRSFRMACBS', 'TDSP', 'PSAVERT', 'NYFED_AUTO90')
         with main.database() as db:
             db.executemany('DELETE FROM economic_series WHERE id=?', [(item,) for item in new_ids])
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], 13)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], len(INDICATORS) - len(new_ids))
         initialize_economy()
         self.calls.clear()
         await self.gateway.refresh_due()
         self.assertEqual(len(self.calls), 8)
         self.assertEqual(self.row('SP500'), original)
         self.assertTrue(all(self.row(item)['observations'] for item in new_ids))
+
+    async def test_cpi_upgrade_preserves_other_seventeen_cached_indicators(self):
+        await self.gateway.refresh_due()
+        original = self.row('PCEPILFE')
+        with main.database() as db:
+            db.execute("DELETE FROM economic_series WHERE id='CPIAUCSL'")
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], 17)
+        initialize_economy()
+        self.calls.clear()
+        await self.gateway.refresh_due()
+        self.assertEqual(len(self.calls), 2)
+        self.assertIsNotNone(self.row('CPIAUCSL')['observations'])
+        self.assertEqual(self.row('PCEPILFE'), original)
 
     async def test_auto_cache_revisions_failure_retention_and_source_metadata(self):
         indicator = BY_ID['NYFED_AUTO90']

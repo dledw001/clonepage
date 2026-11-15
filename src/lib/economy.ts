@@ -5,7 +5,7 @@ export type EconomicIndicator = {
   unit: string; basis: string; interpretation: string; methodology: string; history_limit_years: number | null;
   drawdown: { value: number; high: number; high_date: string; window_start: string } | null;
   provider: "fred" | "nyfed"; source_label: string; source_published_month: string | null; source_data_url: string | null;
-  source_url: string; latest: EconomyPoint | null; change: EconomyChange | null; points: EconomyPoint[];
+  source_url: string; latest: EconomyPoint | null; latest_secondary: EconomyPoint | null; change: EconomyChange | null; points: EconomyPoint[];
   checked_at: string | null; fetched_at: string | null; fred_updated_at: string | null; next_check_at: string | null;
   stale: boolean; error: string | null; metadata_warning: string | null;
 };
@@ -71,7 +71,7 @@ export function economicPlot(points: EconomyPoint[], start: string, end: string)
   };
   return { points: visible, paths: [path('value'), path('secondary')], minimum, maximum,
     zero: minimum < 0 && maximum > 0 ? y(0) : null,
-    selected: visible.filter(point => point.value !== null && Number.isFinite(point.value)) };
+    selected: visible.filter(point => (point.value !== null && Number.isFinite(point.value)) || (point.secondary !== null && Number.isFinite(point.secondary))) };
 }
 
 export function closestPoint(points: EconomyPoint[], day: string) {

@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import main
-from economy import initialize_economy
+from economy import INDICATORS, initialize_economy
 from nyfed import NYFED, parse_auto_workbook, report_url
 from test_economy import auto_workbook
 
@@ -99,4 +99,4 @@ class NewYorkFedTests(unittest.TestCase):
                 self.assertEqual(row['observations'], '[]')
                 self.assertEqual(row['checked_at'], '2026-11-14')
                 self.assertIsNone(row['source_published_month'])
-                self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], 17)
+                self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], len(INDICATORS))

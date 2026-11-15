@@ -7,7 +7,7 @@
   const plot = $derived(economicPlot(points, start, end));
   const index = $derived(Math.max(0, Math.min(active ?? plot.selected.length - 1, plot.selected.length - 1)));
   const selected = $derived(plot.selected[index]);
-  const selectedLabel = $derived(selected ? `${observationLabel(selected.date, frequency)}: ${economyValue(selected.value, unit)}` : 'No observations');
+  const selectedLabel = $derived(selected ? `${observationLabel(selected.date, frequency)}: ${secondary ? 'Year over year ' : ''}${selected.value === null ? 'unavailable' : economyValue(selected.value, unit)}${secondary ? '; 3-month annualized ' + (selected.secondary === null ? 'unavailable' : economyValue(selected.secondary, '%')) : ''}` : 'No observations');
   function pointAt(event: PointerEvent) {
     const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
     const fraction = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
@@ -36,7 +36,7 @@
           {#if plot.zero !== null}<line x1="0" y1={plot.zero} x2="600" y2={plot.zero} class="zero-line" />{/if}
           <path d={plot.paths[0]} class="main-line" />
           {#if secondary}<path d={plot.paths[1]} class="secondary-line" />{/if}
-          {#each plot.selected.length <= 32 ? plot.selected : [] as point}
+          {#each plot.selected.length <= 32 ? plot.selected.filter(point => point.value !== null) : [] as point}
             <circle cx={(Date.parse(point.date+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/Math.max(1,Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))*600}
                     cy={(plot.maximum-point.value!)/(plot.maximum-plot.minimum)*160} r="2.5" class="observation-dot" />
           {/each}
@@ -45,7 +45,7 @@
       </div>
     </div>
     <div class="x-axis" aria-hidden="true"><span>{new Date(start+'T00:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',year:'numeric'})}</span><span>{new Date(end+'T00:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',month:'short',year:'numeric'})}</span></div>
-    <div class="chart-reading" aria-live="polite">{#if active !== null && selected}<span>{selectedLabel}</span>{#if secondary && selected.secondary !== null}<span>3-month annualized: {economyValue(selected.secondary, '%')}</span>{/if}{:else}<span>Hover, tap, or use arrow keys to explore</span>{/if}</div>
+    <div class="chart-reading" aria-live="polite">{#if active !== null && selected}<span>{selectedLabel}</span>{:else}<span>Hover, tap, or use arrow keys to explore</span>{/if}</div>
     {#if secondary}<div class="legend"><span><i></i>Year over year</span><span><i class="secondary"></i>3-month annualized</span></div>{/if}
   </div>
 {:else}<p class="empty-chart">No observations are available for this range.</p>{/if}

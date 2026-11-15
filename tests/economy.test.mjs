@@ -51,6 +51,16 @@ test('plots preserve native dates, gaps, negative values, and the end of release
   assert.equal(closestPoint(plot.selected,'2026-02-28'),1);
   assert.equal(economicPlot([], '2026-01-01','2026-04-01').selected.length,0);
 });
+test('an inflation observation with only a three-month rate remains explorable without filling YoY',()=>{
+  const points=[{date:'2026-09-01',value:3.7,secondary:4.5},{date:'2026-10-01',value:null,secondary:5.7}];
+  const plot=economicPlot(points,'2026-01-01','2026-11-15');
+  assert.equal(plot.selected.length,2);
+  assert.equal(plot.selected[1].value,null);
+  assert.equal(plot.selected[1].secondary,5.7);
+  assert.match(plot.paths[1],/L/);
+  assert.doesNotMatch(plot.paths[0],/L/);
+});
+
 test('flat and single-observation charts have a finite nonzero vertical range',()=>{
   const plot=economicPlot([{date:'2026-01-01',value:0,secondary:null}], '2026-01-01','2026-02-01');
   assert.ok(plot.maximum>plot.minimum);

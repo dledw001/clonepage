@@ -1,6 +1,6 @@
 # Economic dashboard
 
-`/economy` adds an Economics navigation item and seventeen U.S. indicators grouped
+`/economy` adds an Economics navigation item and eighteen U.S. indicators grouped
 into Labor market, Inflation & growth, Interest rates & financial conditions,
 Market conditions, and Household finances. It follows the shared type scale, Lucide icon set,
 aligned page width, and light/dark themes. Phones use a readable two-by-two
@@ -11,7 +11,7 @@ navigation grid for the four pages.
 No API key, account, new service, or environment variable is required. The API
 uses FRED's public native-frequency CSV downloads at
 `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<series>` and retrieves the
-publication timestamp from the public series page. Only the sixteen fixed FRED IDs
+publication timestamp from the public series page. Only the seventeen fixed FRED IDs
 can be fetched. Auto-loan delinquency comes from the New York Fed report; all
 requests use verified HTTPS, bounded responses, timeouts, and
 at most two concurrent series downloads. Redirects are not followed.
@@ -55,6 +55,7 @@ retention as FRED. No extra service or credentials are required.
 | --- | --- | --- |
 | UNRATE | Unemployment rate, % | Latest 3-month average minus preceding 3-month average, pp |
 | ICSA | Mean of 4 consecutive weekly observations | Change from previous week's 4-week average, claims |
+| CPIAUCSL | All-items CPI-U YoY inflation, %; 3-month annualized inflation, % | Change in YoY inflation from prior month, pp |
 | PCEPILFE | YoY inflation, %; 3-month annualized inflation, % | Change in YoY inflation from prior month, pp |
 | GDPC1 | QoQ annualized real growth, % | Change in annualized growth from prior quarter, pp |
 | DGS10 | 10-year yield, % | 30-calendar-day change, pp |
@@ -133,8 +134,13 @@ Five years is the default chart window, with a one-year detail option. The
 high-yield chart uses available three-year history when the five-year option is
 selected and explains the restriction. Lines stop at the last released period;
 missing values create gaps. No unreleased period is forward-filled. Quarterly
-observations have visible dots. Core PCE overlays its two transformed rates with
-solid/dashed lines. Hover/tap and arrow keys explore actual observations, and
+observations have visible dots. Headline CPI and core PCE each overlay YoY and three-month annualized inflation
+with solid/dashed lines. Both use seasonally adjusted index levels; headline CPI
+includes food and energy. Each inflation card compares its current YoY rate with
+its own prior month, in percentage points. If a missing year-ago observation
+prevents the latest YoY calculation, that plot remains a gap. The latest valid
+three-month rate is still shown with its own observation month when different,
+and chart exploration includes observations with only that secondary rate. Hover/tap and arrow keys explore actual observations, and
 values are also exposed through the chart's accessible slider label.
 
 Arrows use neutral styling and describe the specified metric's movement. Each
@@ -154,13 +160,13 @@ malformed/oversized responses, source timestamps, cancellation, API routes,
 display formatting, plot gaps, keyboard-compatible charts, and component builds.
 Run the full backend suite, `npm test` (Linux/WSL for deployment shell tests),
 `npm run check`, and `npm run build`. The implementation was also checked against
-live responses for all seventeen indicators using an isolated local cache.
+live responses for all eighteen indicators using an isolated local cache.
 
 ## Primary references
 
 - [FRED series observations API and parameters](https://fred.stlouisfed.org/docs/api/fred/series_observations.html)
 - [Unemployment](https://fred.stlouisfed.org/series/UNRATE), [claims](https://fred.stlouisfed.org/series/ICSA)
-- [Core PCE](https://fred.stlouisfed.org/series/PCEPILFE), [real GDP](https://fred.stlouisfed.org/series/GDPC1), [manufacturing](https://fred.stlouisfed.org/series/IPMAN)
+- [Headline CPI](https://fred.stlouisfed.org/series/CPIAUCSL), [Core PCE](https://fred.stlouisfed.org/series/PCEPILFE), [real GDP](https://fred.stlouisfed.org/series/GDPC1), [manufacturing](https://fred.stlouisfed.org/series/IPMAN)
 - [10-year yield](https://fred.stlouisfed.org/series/DGS10), [mortgages](https://fred.stlouisfed.org/series/MORTGAGE30US)
 - [High-yield spread and its three-year history limit](https://fred.stlouisfed.org/series/BAMLH0A0HYM2), [yield curve](https://fred.stlouisfed.org/series/T10Y2Y)
 - [Real disposable income](https://fred.stlouisfed.org/series/DSPIC96), [credit card delinquency](https://fred.stlouisfed.org/series/DRCCLACBS)

@@ -52,6 +52,7 @@
         <div class="indicator-grid">
           {#each items as item (item.id)}
             {@const direction = movement(item.change)}
+            {@const inflation = item.id === 'PCEPILFE' || item.id === 'CPIAUCSL'}
             <article class="indicator-card" aria-label={item.title}>
               <header class="card-heading"><h3>{item.title}</h3><a href={item.source_url} target="_blank" rel="noopener noreferrer" aria-label={`${item.title} on ${item.source_label}`}>{item.provider === 'nyfed' ? 'NY Fed' : item.id}<ArrowUpRight size={iconSizes.inline}/></a></header>
               <p class="frequency">{item.frequency} · {item.adjustment}</p>
@@ -62,11 +63,11 @@
                 {#if direction === 'up'}<ArrowUpRight size={iconSizes.action}/>{:else if direction === 'down'}<ArrowDownRight size={iconSizes.action}/>{:else}<Minus size={iconSizes.action}/>{/if}
                 <strong>{economyValue(item.change?.value, item.change?.unit ?? 'pp', true)}</strong><span>{item.change?.label ?? 'Comparison unavailable'}</span>
               </div>
-              {#if item.id === 'PCEPILFE'}<p class="secondary-value">3-month annualized <strong>{economyValue(item.latest?.secondary, '%')}</strong></p>{/if}
+              {#if inflation}<p class="secondary-value">3-month annualized <strong>{economyValue(item.latest_secondary?.secondary, '%')}</strong>{#if item.latest_secondary && item.latest_secondary.date !== item.latest?.date}<span>{observationLabel(item.latest_secondary.date, item.frequency)}</span>{/if}</p>{/if}
               {#if item.id === 'SP500'}<p class="secondary-value">From 52-week closing high <strong>{economyValue(item.drawdown?.value, '%', true)}</strong></p>{/if}
               {#if item.error}<p class="card-error" role="status">{item.error} {item.latest ? 'Showing the last successful download.' : 'No observations are available yet.'}</p>{/if}
               {#if item.history_limit_years && years > item.history_limit_years}<p class="history-note">FRED limits this series to {item.history_limit_years} years; available history is shown.</p>{/if}
-              {#if item.latest}<EconomyChart points={item.points} start={start(item)} {end} unit={item.unit} frequency={item.frequency} title={item.title} secondary={item.id === 'PCEPILFE'}/>{:else}<div class="empty-history">{checking ? 'Waiting for observations…' : 'History unavailable'}</div>{/if}
+              {#if item.latest || item.latest_secondary}<EconomyChart points={item.points} start={start(item)} {end} unit={item.unit} frequency={item.frequency} title={item.title} secondary={inflation}/>{:else}<div class="empty-history">{checking ? 'Waiting for observations…' : 'History unavailable'}</div>{/if}
               {#if item.provider === 'nyfed'}
                 <div class="publication"><span>Report published</span><time datetime={item.source_published_month ?? undefined}>{item.source_published_month ? observationLabel(item.source_published_month + '-01', 'Monthly') : 'Unavailable'}</time></div>
               {:else}<div class="publication"><span>FRED updated</span><time datetime={item.fred_updated_at ?? undefined}>{updatedLabel(item.fred_updated_at)}</time></div>{/if}
