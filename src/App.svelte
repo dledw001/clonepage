@@ -15,6 +15,7 @@
   import HomeCustomize from './components/HomeCustomize.svelte';
   import { HomeLayoutStore, defaultHomeSettings, homeSectionFromSearch, type LayoutState } from './lib/home';
   import Infrastructure from './components/Infrastructure.svelte';
+  import Economy from './components/Economy.svelte';
   import SavedArticle from './components/SavedArticle.svelte';
   import { PageNavigation, isPlainClick } from './lib/navigation';
 
@@ -42,10 +43,10 @@
   });
   function routeFromPath(path: string) {
     const reader = /^\/reading\/([A-Za-z0-9_-]{1,80})\/?$/.exec(path);
-    return { page: reader ? 'reader' as const : path.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' as const : path.replace(/\/$/, '') === '/hacker-news' ? 'hacker-news' as const : 'home' as const, articleId: reader?.[1] ?? '' };
+    return { page: reader ? 'reader' as const : path.replace(/\/$/, '') === '/infrastructure' ? 'infrastructure' as const : path.replace(/\/$/, '') === '/hacker-news' ? 'hacker-news' as const : path.replace(/\/$/, '') === '/economy' ? 'economy' as const : 'home' as const, articleId: reader?.[1] ?? '' };
   }
   const initialRoute = routeFromPath(typeof window !== 'undefined' ? window.location.pathname : '/');
-  let page = $state<'home' | 'infrastructure' | 'reader' | 'hacker-news'>(initialRoute.page);
+  let page = $state<'home' | 'infrastructure' | 'reader' | 'hacker-news' | 'economy'>(initialRoute.page);
   let readerId = $state(initialRoute.articleId);
   let monitorFocus = $state(typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('monitor'));
   let homeVisited = $state(initialRoute.page === 'home');
@@ -171,6 +172,7 @@
         <a href="/" class:current={page === 'home'} aria-current={page === 'home' ? 'page' : undefined} onclick={event => navigate(event, '/')}><featureIcons.home size={iconSizes.navigation} />Home</a>
         <a href="/infrastructure" class:current={page === 'infrastructure'} aria-current={page === 'infrastructure' ? 'page' : undefined} onclick={event => navigate(event, '/infrastructure')}><featureIcons.infrastructure size={iconSizes.navigation} />Infrastructure</a>
         <a href="/hacker-news" class:current={page === 'hacker-news'} aria-current={page === 'hacker-news' ? 'page' : undefined} onclick={event => navigate(event, '/hacker-news')}><featureIcons.hackerNews size={iconSizes.navigation} />Hacker News</a>
+        <a href="/economy" class:current={page === 'economy'} aria-current={page === 'economy' ? 'page' : undefined} onclick={event => navigate(event, '/economy')}><featureIcons.economy size={iconSizes.navigation} />Economics</a>
       </nav>
 
       <div class="top-actions">
@@ -195,6 +197,8 @@
         {#key readerId}<SavedArticle articleId={readerId} {theme} onback={backToList} />{/key}
       {:else if page === 'hacker-news'}
         <HackerNews onnavigate={navigate} />
+      {:else if page === 'economy'}
+        <Economy />
       {:else if page === 'infrastructure'}
         <Infrastructure {monitorFocus} />
       {/if}

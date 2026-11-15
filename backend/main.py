@@ -28,6 +28,7 @@ from pdf_progress import PROGRESS_COLUMNS, PROGRESS_NAMES, initialize_pdf_progre
 from article_progress import HTML_PROGRESS_COLUMNS, HTML_PROGRESS_NAMES, initialize_article_progress, progress_for as html_progress_for, router as article_progress_router
 from home import initialize_home, router as home_router
 from weather import WeatherGateway, router as weather_router
+from economy import EconomyGateway, initialize_economy, router as economy_router
 
 import re
 
@@ -227,6 +228,7 @@ async def lifespan(app: FastAPI):
     initialize_services()
     initialize_availability()
     initialize_home()
+    initialize_economy()
     app.state.dsm_sessions = DSMSessions()
 
     nas_url = os.getenv("NAS_TEMPS_URL", "http://10.0.0.149:8888").rstrip("/") + "/"
@@ -249,7 +251,12 @@ async def lifespan(app: FastAPI):
     ) as hn_client, httpx.AsyncClient(
         timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False, trust_env=False,
         headers={"User-Agent": "Clonepage/0.4 (personal weather dashboard)", "Accept": "application/json"},
-    ) as weather_client:
+    ) as weather_client, httpx.AsyncClient(
+        timeout=httpx.Timeout(20.0, connect=5.0), follow_redirects=False, trust_env=False,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; Clonepage/1.0; personal dashboard)"},
+    ) as economy_client:
+        app.state.economy = EconomyGateway(economy_client)
+        economy_poll = asyncio.create_task(app.state.economy.run())
         app.state.weather = WeatherGateway(weather_client)
         app.state.hacker_news = HackerNewsGateway(hn_client)
         app.state.nas_temps = NasTempsGateway(client)
@@ -267,6 +274,10 @@ async def lifespan(app: FastAPI):
         try:
             yield
         finally:
+            economy_poll.cancel()
+            with suppress(asyncio.CancelledError):
+                await economy_poll
+            await app.state.economy.close()
             availability_poll.cancel()
             with suppress(asyncio.CancelledError):
                 await availability_poll
@@ -293,6 +304,7 @@ app.include_router(progress_router)
 app.include_router(article_progress_router)
 app.include_router(home_router)
 app.include_router(weather_router)
+app.include_router(economy_router)
 app.include_router(availability_router)
 app.include_router(shortcuts_router)
 app.include_router(dsm_router)

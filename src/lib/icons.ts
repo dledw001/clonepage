@@ -1,4 +1,4 @@
-import { Activity, BookOpen, CloudSun, Container, House, LayoutGrid, Newspaper, Rss } from '@lucide/svelte';
+import { Activity, BookOpen, CloudSun, Container, ChartNoAxesCombined, House, LayoutGrid, Newspaper, Rss } from '@lucide/svelte';
 
 /** Shared defaults inherited through Lucide's Svelte context. */
 export const lucideDefaults = { size:18, strokeWidth:1.7 };
@@ -20,6 +20,7 @@ export const iconSizes = {
 export const featureIcons = {
   home:House,
   infrastructure:Activity,
+  economy:ChartNoAxesCombined,
   hackerNews:Newspaper,
   reading:BookOpen,
   feeds:Rss,
