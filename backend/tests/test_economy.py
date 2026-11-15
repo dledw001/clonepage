@@ -1,5 +1,6 @@
 import asyncio
 import json
+import io
 import sys
 import tempfile
 import unittest
@@ -7,6 +8,8 @@ from contextlib import ExitStack
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
+
+from openpyxl import Workbook
 
 import httpx
 from fastapi.testclient import TestClient
@@ -28,9 +31,27 @@ def snapshot(series_id, observations):
     return present(BY_ID[series_id], {"observations": json.dumps(observations), "fetched_at": NOW.isoformat()}, NOW)
 
 
+def auto_workbook(rows=None):
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = 'Page 12 Data'
+    sheet.append(['Percent of Balance 90+ Days Delinquent by Loan Type '])
+    sheet.append(['Percent'])
+    sheet.append(['Return to Table of Contents'])
+    sheet.append([None, 'MORTGAGE', 'AUTO', 'CC'])
+    for quarter, value in rows or [('25:Q3', 5.02), ('26:Q3', 5.66)]:
+        sheet.append([quarter, 1.13, value, 12.9])
+    contents = workbook.create_sheet('TABLE OF CONTENTS')
+    contents.append([None, 'November 2026'])
+    stream = io.BytesIO()
+    workbook.save(stream)
+    workbook.close()
+    return stream.getvalue()
+
+
 class CalculationTests(unittest.TestCase):
-    def test_allowlist_contains_exactly_thirteen_requested_series(self):
-        self.assertEqual(set(BY_ID), set('UNRATE ICSA PCEPILFE GDPC1 DGS10 MORTGAGE30US DSPIC96 DRCCLACBS BAMLH0A0HYM2 T10Y2Y IPMAN SP500 VIXCLS'.split()))
+    def test_allowlist_contains_exactly_seventeen_requested_series(self):
+        self.assertEqual(set(BY_ID), set('UNRATE ICSA PCEPILFE GDPC1 DGS10 MORTGAGE30US DSPIC96 DRCCLACBS BAMLH0A0HYM2 T10Y2Y IPMAN SP500 VIXCLS DRSFRMACBS TDSP PSAVERT NYFED_AUTO90'.split()))
 
     def test_market_group_contains_equities_volatility_and_credit_risk(self):
         self.assertEqual([item.id for item in INDICATORS if item.group == 'Market conditions'], ['SP500', 'VIXCLS', 'BAMLH0A0HYM2'])
@@ -65,6 +86,30 @@ class CalculationTests(unittest.TestCase):
     def test_equity_drawdown_is_unavailable_without_full_window_coverage(self):
         self.assertIsNone(snapshot('SP500', raw(('2026-06-01', 6000), ('2026-11-12', 5400)))['drawdown'])
         self.assertIsNone(snapshot('VIXCLS', raw(('2026-11-12', 18.7)))['drawdown'])
+
+    def test_household_rates_use_year_over_year_percentage_point_changes(self):
+        for series in ('DRSFRMACBS', 'TDSP', 'NYFED_AUTO90'):
+            with self.subTest(series=series):
+                card = snapshot(series, raw(('2025-07-01', 3), ('2026-04-01', 4), ('2026-07-01', 4.5)))
+                self.assertEqual(card['latest']['value'], 4.5)
+                self.assertEqual(card['change']['value'], 1.5)
+                self.assertEqual(card['change']['unit'], 'pp')
+                self.assertEqual(card['change']['comparison_date'], '2025-07-01')
+                self.assertIsNone(snapshot(series, raw(('2025-04-01', 3), ('2026-07-01', 4.5)))['change']['value'])
+        saving = snapshot('PSAVERT', raw(('2025-09-01', 4), ('2026-08-01', 4.2), ('2026-09-01', 3.8)))
+        self.assertAlmostEqual(saving['change']['value'], -.2)
+        self.assertEqual(saving['latest']['value'], 3.8)  # no compounding or annualizing a published rate
+        self.assertEqual(saving['change']['comparison_date'], '2025-09-01')
+
+    def test_household_sources_and_definitions_distinguish_delinquency_measures(self):
+        for series in ('DRCCLACBS', 'DRSFRMACBS'):
+            self.assertIn('30+', BY_ID[series].basis)
+            self.assertIn('nonaccrual', BY_ID[series].basis)
+        auto = snapshot('NYFED_AUTO90', [])
+        self.assertEqual(auto['provider'], 'nyfed')
+        self.assertEqual(auto['source_label'], 'New York Fed')
+        self.assertEqual(auto['source_url'], 'https://www.newyorkfed.org/microeconomics/hhdc')
+        self.assertIn('90+', auto['basis'])
 
     def test_calendar_month_subtraction_clamps_end_of_month_and_leap_days(self):
         self.assertEqual(months_before(date(2024, 5, 31), 3), date(2024, 2, 29))
@@ -175,6 +220,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.revision = 0
         self.in_flight = 0
         self.peak = 0
+        self.auto_data = auto_workbook()
         self.client = httpx.AsyncClient(transport=httpx.MockTransport(self.handle), follow_redirects=False)
         self.addAsyncCleanup(self.client.aclose)
         self.gateway = EconomyGateway(self.client, lambda:self.now)
@@ -188,6 +234,10 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
             if request.url.path.startswith('/series/'):
                 return httpx.Response(503 if self.mode == 'metadata' else 200, content=META)
+            if request.url.host == 'www.newyorkfed.org':
+                if request.url.path.endswith('hhdc-iframe'):
+                    return httpx.Response(200, text='<a href="/medialibrary/interactives/householdcredit/data/xls/HHD_C_Report_2026Q3">Data</a>')
+                return httpx.Response(200, content=self.auto_data)
             series_id = request.url.params['id']
             if self.mode == 'failure' and series_id == 'UNRATE':return httpx.Response(429)
             if self.mode == 'redirect':return httpx.Response(302, headers={'Location':'http://localhost/'})
@@ -217,14 +267,14 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.calls), 2 * len(INDICATORS))
         self.assertLessEqual(self.peak, 2)
         self.assertIsNotNone(second['indicators'][0]['checked_at'])
-        self.assertTrue(all(request.url.host == 'fred.stlouisfed.org' for request in self.calls))
+        self.assertTrue(all(request.url.host in ('fred.stlouisfed.org', 'www.newyorkfed.org') for request in self.calls))
 
-    async def test_existing_eleven_series_cache_is_preserved_when_market_series_are_added(self):
+    async def test_existing_cache_is_preserved_when_market_series_are_added(self):
         await self.gateway.refresh_due()
         original = self.row('UNRATE')
         with main.database() as db:
             db.execute("DELETE FROM economic_series WHERE id IN ('SP500', 'VIXCLS')")
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], 11)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], len(INDICATORS) - 2)
         initialize_economy()
         self.assertEqual(self.row('UNRATE'), original)
         self.assertIsNone(self.row('SP500')['observations'])
@@ -235,6 +285,42 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.row('SP500')['observations'])
         self.assertIsNotNone(self.row('VIXCLS')['observations'])
         self.assertEqual(self.row('UNRATE'), original)
+
+    async def test_household_upgrade_preserves_existing_thirteen_series(self):
+        await self.gateway.refresh_due()
+        original = self.row('SP500')
+        new_ids = ('DRSFRMACBS', 'TDSP', 'PSAVERT', 'NYFED_AUTO90')
+        with main.database() as db:
+            db.executemany('DELETE FROM economic_series WHERE id=?', [(item,) for item in new_ids])
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], 13)
+        initialize_economy()
+        self.calls.clear()
+        await self.gateway.refresh_due()
+        self.assertEqual(len(self.calls), 8)
+        self.assertEqual(self.row('SP500'), original)
+        self.assertTrue(all(self.row(item)['observations'] for item in new_ids))
+
+    async def test_auto_cache_revisions_failure_retention_and_source_metadata(self):
+        indicator = BY_ID['NYFED_AUTO90']
+        await self.gateway.collect(indicator)
+        original = self.row(indicator.id)
+        self.assertEqual(original['source_published_month'], '2026-11')
+        self.assertTrue(original['source_data_url'].endswith('2026Q3'))
+        self.assertIsNone(original['fred_updated_at'])
+        self.assertIsNone(original['metadata_warning'])
+        self.now += timedelta(days=1)
+        self.auto_data = b'not an XLSX file'
+        await self.gateway.collect(indicator)
+        failed = self.row(indicator.id)
+        self.assertEqual(failed['observations'], original['observations'])
+        self.assertEqual(failed['source_published_month'], original['source_published_month'])
+        self.assertEqual(failed['fetched_at'], original['fetched_at'])
+        self.assertIn('New York Fed', failed['error'])
+        self.auto_data = auto_workbook([('25:Q3', 4.9), ('26:Q3', 5.66)])
+        await self.gateway.collect(indicator)
+        card = present(indicator, self.row(indicator.id), self.now)
+        self.assertAlmostEqual(card['change']['value'], .76)
+        self.assertIsNone(card['error'])
 
     async def test_persistent_daily_cache_survives_gateway_restart_and_revises_history(self):
         await self.gateway.refresh_due()
@@ -291,7 +377,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.row()['observations'], original)
             self.assertIsNotNone(self.row()['error'])
             self.assertNotIn('private connection detail', self.row()['error'])
-        self.assertTrue(all(request.url.host == 'fred.stlouisfed.org' for request in self.calls))
+        self.assertTrue(all(request.url.host in ('fred.stlouisfed.org', 'www.newyorkfed.org') for request in self.calls))
 
     async def test_close_cancels_active_download_without_publishing_empty_data(self):
         self.mode = 'waiting'

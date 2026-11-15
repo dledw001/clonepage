@@ -1,6 +1,6 @@
 # Economic dashboard
 
-`/economy` adds an Economics navigation item and thirteen U.S. indicators grouped
+`/economy` adds an Economics navigation item and seventeen U.S. indicators grouped
 into Labor market, Inflation & growth, Interest rates & financial conditions,
 Market conditions, and Household finances. It follows the shared type scale, Lucide icon set,
 aligned page width, and light/dark themes. Phones use a readable two-by-two
@@ -11,8 +11,9 @@ navigation grid for the four pages.
 No API key, account, new service, or environment variable is required. The API
 uses FRED's public native-frequency CSV downloads at
 `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<series>` and retrieves the
-publication timestamp from the public series page. Only the thirteen fixed IDs
-can be fetched; requests use verified HTTPS, bounded responses, timeouts, and
+publication timestamp from the public series page. Only the sixteen fixed FRED IDs
+can be fetched. Auto-loan delinquency comes from the New York Fed report; all
+requests use verified HTTPS, bounded responses, timeouts, and
 at most two concurrent series downloads. Redirects are not followed.
 
 The `economic_series` table lives in the existing reading SQLite database.
@@ -36,6 +37,18 @@ series continue independently. Failed publication-timestamp parsing leaves an
 explicit unavailable timestamp; it does not discard valid observations or label
 the download time as FRED's update time. API shutdown cancels active collection.
 
+The New York Fed adapter discovers the current completed-quarter workbook from
+its official Household Debt and Credit report page. Only the verified HTTPS
+`www.newyorkfed.org` report-download path is accepted; arbitrary links and
+redirects are rejected. The XLSX reader checks the exact stock-delinquency title,
+percent units, AUTO column, dates, numeric range and duplicates, with bounded
+downloads, expanded archive size and worksheet dimensions. It does not read the
+similarly named transition-rate worksheet. Missing quarters stay null. The report
+publication month is read from the workbook, without inventing a publication day
+or time; the exact workbook is linked from the card's calculation details.
+It uses the same daily persistent cache, historical replacement and failure
+retention as FRED. No extra service or credentials are required.
+
 ## Series and transformations
 
 | Series | Primary display | Recent movement |
@@ -53,6 +66,10 @@ the download time as FRED's update time. API shutdown cancels active collection.
 | IPMAN | YoY manufacturing production growth, % | Change in YoY growth from prior month, pp |
 | SP500 | S&P 500 daily closing price index; drawdown from 52-week closing high, % | 30-calendar-day price change, % |
 | VIXCLS | VIX daily closing index level | 30-calendar-day change, index points |
+| DRSFRMACBS | Mortgage delinquency at commercial banks, % | Rate minus rate 4 quarters earlier, pp |
+| NYFED_AUTO90 | Auto-loan balances 90+ days delinquent, % (New York Fed, not a FRED ID) | Rate minus rate 4 quarters earlier, pp |
+| TDSP | Required household debt payments / disposable personal income, % | Rate minus rate 4 quarters earlier, pp |
+| PSAVERT | Personal saving / disposable personal income, % | Rate minus rate 12 months earlier, pp |
 
 For an underlying level X:
 
@@ -89,10 +106,25 @@ series use neutral arrows and the same daily cache and native observation dates
 as the other indicators. Upgrading seeds the two new cache entries without
 replacing existing observations or check schedules.
 
+Household finances now includes income growth, saving, debt-payment burden,
+credit card delinquency, mortgage delinquency and auto-loan delinquency. Saving
+and debt service are published aggregate ratios, not estimates for the median
+household; use the published percentages without compounding them. Their changes
+subtract the same observation period a year earlier.
+
+The bank credit-card and mortgage delinquency series count balances 30+ days
+past due and still accruing interest, plus nonaccrual balances. Mortgage coverage
+is single-family residential loans at domestic offices of commercial banks,
+not the entire mortgage market. New York Fed autos include bank and auto-finance
+lenders and measure outstanding balances 90+ days late (including severely
+derogatory balances), not the percent of borrowers or flow of new delinquencies.
+These definitions appear on the cards and in their interpretation details; the
+levels should not be treated as directly comparable delinquency thresholds.
+
 ## Presentation
 
-Each card separates its observation period, FRED publication timestamp, and last
-check time. Monthly observations display a month; quarterly observations display
+Each card separates its observation period, source publication timestamp or
+month, and last check time. Monthly observations display a month; quarterly observations display
 a quarter, not the first day of that quarter. Weekly observations identify the
 week ending date. A recently checked older monthly/quarterly release is not
 mistaken for a current-day observation.
@@ -122,7 +154,7 @@ malformed/oversized responses, source timestamps, cancellation, API routes,
 display formatting, plot gaps, keyboard-compatible charts, and component builds.
 Run the full backend suite, `npm test` (Linux/WSL for deployment shell tests),
 `npm run check`, and `npm run build`. The implementation was also checked against
-live responses for all thirteen series using an isolated local cache.
+live responses for all seventeen indicators using an isolated local cache.
 
 ## Primary references
 
@@ -134,3 +166,7 @@ live responses for all thirteen series using an isolated local cache.
 - [Real disposable income](https://fred.stlouisfed.org/series/DSPIC96), [credit card delinquency](https://fred.stlouisfed.org/series/DRCCLACBS)
 
 - [S&P 500 price index and history limit](https://fred.stlouisfed.org/series/SP500), [VIX](https://fred.stlouisfed.org/series/VIXCLS)
+
+- [Mortgage delinquency](https://fred.stlouisfed.org/series/DRSFRMACBS), [bank delinquency definitions](https://www.federalreserve.gov/releases/ChargeOff/)
+- [Debt-service ratio](https://fred.stlouisfed.org/series/TDSP), [saving rate](https://fred.stlouisfed.org/series/PSAVERT)
+- [New York Fed household debt data](https://www.newyorkfed.org/microeconomics/hhdc), [data dictionary](https://www.newyorkfed.org/medialibrary/interactives/householdcredit/data/pdf/data_dictionary_HHDC.pdf)

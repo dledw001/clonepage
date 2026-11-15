@@ -1,4 +1,4 @@
-"""FRED observations, deterministic economic transformations, and persistent daily cache."""
+"""Official economic observations, transformations, and persistent daily cache."""
 import asyncio
 import calendar
 import csv
@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta, timezone
 import httpx
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Request, Response
+
+from nyfed import REPORT_PAGE, SOURCE_PAGE, parse_auto_workbook, report_url
 
 router = APIRouter(prefix="/api/economy", tags=["Economics"])
 DAY = 86400
@@ -34,6 +36,7 @@ class Indicator:
     interpretation: str
     methodology: str
     history_limit: int | None = None
+    provider: str = "fred"
 
 
 INDICATORS = (
@@ -49,7 +52,11 @@ INDICATORS = (
     Indicator("VIXCLS", "VIX", "Market conditions", "Daily", "Chicago Board Options Exchange", "Not seasonally adjusted", "volatility", "index", "Expected volatility · index level", "VIX reflects options-implied expectations of near-term S&P 500 volatility. A rising level signals greater expected uncertainty; it does not predict market direction.", "The published VIX index level is shown without converting it to a percentage or basis points. The 30-day change subtracts the last valid level on or before 30 calendar days earlier and is expressed in index points."),
     Indicator("BAMLH0A0HYM2", "High-yield credit spread", "Market conditions", "Daily", "ICE Data Indices, LLC", "Not seasonally adjusted", "spread", "bps", "Option-adjusted spread", "A rising spread generally indicates greater perceived credit risk.", "Published percentage value × 100 gives basis points. Change compares with the closest available observation on or before 30 calendar days earlier.", 3),
     Indicator("DSPIC96", "Real disposable income", "Household finances", "Monthly", "U.S. Bureau of Economic Analysis", "Seasonally adjusted annual rate", "yoy", "%", "Year-over-year growth", "Rising real income growth generally indicates improving household purchasing power.", "100 × (real disposable personal income / income 12 months earlier − 1). Change compares YoY growth with the prior month."),
-    Indicator("DRCCLACBS", "Credit card delinquency", "Household finances", "Quarterly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "delinquency", "%", "Delinquency rate", "A rising rate generally indicates increasing household financial stress.", "Current delinquency rate minus the rate four quarters earlier, in percentage points."),
+    Indicator("PSAVERT", "Personal saving rate", "Household finances", "Monthly", "U.S. Bureau of Economic Analysis", "Seasonally adjusted annual rate", "rate_yoy", "%", "Saving as a share of disposable income", "The saving rate describes the share of aggregate disposable income left after personal outlays. A falling rate can signal a smaller saving cushion, but this is not the saving rate of a typical household.", "Published personal saving divided by disposable personal income. Current rate minus the rate 12 months earlier, in percentage points; the published rate is not annualized again."),
+    Indicator("TDSP", "Household debt service", "Household finances", "Quarterly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "rate_yoy", "%", "Required debt payments / disposable income", "A rising ratio means required mortgage and consumer debt payments take a larger share of aggregate disposable income. This aggregate ratio does not describe every household's burden.", "Published required household debt payments divided by disposable personal income. Change subtracts the rate four quarters earlier, in percentage points."),
+    Indicator("DRCCLACBS", "Credit card delinquency", "Household finances", "Quarterly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "delinquency", "%", "Commercial banks · 30+ days overdue or nonaccrual", "A rising rate generally indicates increasing household financial stress. This is the share of commercial-bank credit card loan balances that are 30+ days past due and accruing interest, or in nonaccrual status.", "Current delinquency rate minus the rate four quarters earlier, in percentage points. Coverage and delinquency thresholds differ from the New York Fed auto-loan measure."),
+    Indicator("DRSFRMACBS", "Mortgage delinquency", "Household finances", "Quarterly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "rate_yoy", "%", "Commercial banks · 30+ days overdue or nonaccrual", "A rising rate signals more repayment trouble among homeowners. Coverage is single-family residential mortgages held at domestic offices of commercial banks, not all U.S. mortgages.", "Share of covered mortgage balances 30+ days past due and accruing interest, or in nonaccrual status. Current rate minus the rate four quarters earlier, in percentage points. This differs from the New York Fed's 90+ day auto-loan measure."),
+    Indicator("NYFED_AUTO90", "Auto-loan delinquency", "Household finances", "Quarterly", "New York Fed Consumer Credit Panel/Equifax", "Not seasonally adjusted", "rate_yoy", "%", "Share of balances 90+ days delinquent", "A rising share indicates increasing auto-loan repayment stress. Coverage includes bank and auto-finance lenders. Serious delinquency includes 90-day late, 120+ day late and severely derogatory balances; this measures balances, not the percentage of borrowers.", "Published percent of auto-loan balances 90+ days delinquent, from the New York Fed Household Debt and Credit report. This is the outstanding delinquency share, not the flow into delinquency. Change subtracts the rate four quarters earlier, in percentage points.", provider="nyfed"),
 )
 
 
@@ -69,6 +76,10 @@ def initialize_economy():
         )
         """
         db.execute(schema_sql)
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(economic_series)")}
+        for name in ("source_published_month", "source_data_url"):
+            if name not in columns:
+                db.execute(f"ALTER TABLE economic_series ADD COLUMN {name} TEXT")
         db.executemany("INSERT OR IGNORE INTO economic_series(id) VALUES (?)", [(item.id,) for item in INDICATORS])
 
 
@@ -174,7 +185,7 @@ def change_for(indicator, latest, points, observations):
             comparison_date, unit, label = (day - timedelta(weeks=1)).isoformat(), "claims", "vs prior week"
         elif indicator.transform == "gdp":
             comparison_date, label = months_before(day, 3).isoformat(), "vs prior quarter"
-        elif indicator.transform == "delinquency":
+        elif indicator.transform in ("delinquency", "rate_yoy"):
             comparison_date, label = months_before(day, 12).isoformat(), "year-over-year change"
         else:
             comparison_date = months_before(day, 1).isoformat()
@@ -213,7 +224,9 @@ def present(indicator, row, now):
     return {"id": indicator.id, "title": indicator.title, "group": indicator.group, "frequency": indicator.frequency,
             "source": indicator.source, "adjustment": indicator.adjustment, "unit": indicator.unit, "basis": indicator.basis,
             "interpretation": indicator.interpretation, "methodology": indicator.methodology, "history_limit_years": indicator.history_limit,
-            "source_url": FRED + "/series/" + indicator.id, "latest": latest, "change": change,
+            "provider": indicator.provider, "source_label": "New York Fed" if indicator.provider == "nyfed" else "FRED",
+            "source_url": SOURCE_PAGE if indicator.provider == "nyfed" else FRED + "/series/" + indicator.id,
+            "source_data_url": row.get("source_data_url"), "source_published_month": row.get("source_published_month"), "latest": latest, "change": change,
             "drawdown": equity_drawdown(latest, points) if indicator.transform == "equity" else None,
             "points": history, "checked_at": row.get("checked_at"), "fetched_at": row.get("fetched_at"),
             "fred_updated_at": row.get("fred_updated_at"), "next_check_at": row.get("next_check_at"),
@@ -244,31 +257,41 @@ class EconomyGateway:
         async with self.limit:
             stamp = self.now()
             try:
-                content = await self.read(FRED + "/graph/fredgraph.csv", {"id": indicator.id})
-                observations = parse_csv(content, indicator.id, stamp.date())
+                published_month, data_url = None, None
+                if indicator.provider == "nyfed":
+                    data_url = report_url(await self.read(REPORT_PAGE), stamp.date())
+                    observations, published_month = await asyncio.to_thread(parse_auto_workbook, await self.read(data_url), stamp.date())
+                else:
+                    observations = parse_csv(await self.read(FRED + "/graph/fredgraph.csv", {"id": indicator.id}), indicator.id, stamp.date())
                 cutoff = months_before(stamp.date(), 73).isoformat()
                 observations = [point for point in observations if point["date"] >= cutoff]
                 updated = None
                 try:
-                    updated = fred_timestamp(await self.read(FRED + "/series/" + indicator.id))
+                    if indicator.provider == "fred":
+                        updated = fred_timestamp(await self.read(FRED + "/series/" + indicator.id))
                 except (httpx.HTTPError, ValueError):
                     pass
+                if indicator.provider == "nyfed":
+                    warning = None if published_month else "Report publication month is unavailable."
+                else:
+                    warning = None if updated else "FRED publication timestamp is unavailable."
                 # Replace the whole retained history: published revisions must win.
                 with database() as db:
                     # language=SQL
                     save_sql = """
                     UPDATE economic_series SET observations=?,fetched_at=?,checked_at=?,fred_updated_at=?,
-                        next_check_at=?,error=NULL,metadata_warning=? WHERE id=?
+                        next_check_at=?,error=NULL,metadata_warning=?,source_published_month=?,source_data_url=? WHERE id=?
                     """
                     db.execute(save_sql, (json.dumps(observations, allow_nan=False), stamp.isoformat(), stamp.isoformat(), updated,
-                               (stamp + timedelta(seconds=DAY)).isoformat(), None if updated else "FRED publication timestamp is unavailable.", indicator.id))
+                               (stamp + timedelta(seconds=DAY)).isoformat(), warning, published_month, data_url, indicator.id))
             except (httpx.HTTPError, ValueError, TypeError, KeyError, UnicodeError) as exc:
+                provider = "New York Fed" if indicator.provider == "nyfed" else "FRED"
                 if isinstance(exc, httpx.HTTPStatusError):
-                    error = f"FRED returned HTTP {exc.response.status_code}."
+                    error = f"{provider} returned HTTP {exc.response.status_code}."
                 elif isinstance(exc, httpx.TimeoutException):
-                    error = "FRED did not respond in time."
+                    error = f"{provider} did not respond in time."
                 else:
-                    error = "FRED observations could not be refreshed."
+                    error = f"{provider} observations could not be refreshed."
                 with database() as db:
                     db.execute("UPDATE economic_series SET checked_at=?,next_check_at=?,error=? WHERE id=?",
                                (stamp.isoformat(), (stamp + timedelta(seconds=RETRY_SECONDS)).isoformat(), error, indicator.id))

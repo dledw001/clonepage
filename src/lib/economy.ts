@@ -4,6 +4,7 @@ export type EconomicIndicator = {
   id: string; title: string; group: string; frequency: string; source: string; adjustment: string;
   unit: string; basis: string; interpretation: string; methodology: string; history_limit_years: number | null;
   drawdown: { value: number; high: number; high_date: string; window_start: string } | null;
+  provider: "fred" | "nyfed"; source_label: string; source_published_month: string | null; source_data_url: string | null;
   source_url: string; latest: EconomyPoint | null; change: EconomyChange | null; points: EconomyPoint[];
   checked_at: string | null; fetched_at: string | null; fred_updated_at: string | null; next_check_at: string | null;
   stale: boolean; error: string | null; metadata_warning: string | null;
