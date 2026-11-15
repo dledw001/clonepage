@@ -1,8 +1,8 @@
 # Economic dashboard
 
-`/economy` adds an Economics navigation item and eleven U.S. indicators grouped
+`/economy` adds an Economics navigation item and thirteen U.S. indicators grouped
 into Labor market, Inflation & growth, Interest rates & financial conditions,
-and Household finances. It follows the shared type scale, Lucide icon set,
+Market conditions, and Household finances. It follows the shared type scale, Lucide icon set,
 aligned page width, and light/dark themes. Phones use a readable two-by-two
 navigation grid for the four pages.
 
@@ -11,7 +11,7 @@ navigation grid for the four pages.
 No API key, account, new service, or environment variable is required. The API
 uses FRED's public native-frequency CSV downloads at
 `https://fred.stlouisfed.org/graph/fredgraph.csv?id=<series>` and retrieves the
-publication timestamp from the public series page. Only the eleven fixed IDs
+publication timestamp from the public series page. Only the thirteen fixed IDs
 can be fetched; requests use verified HTTPS, bounded responses, timeouts, and
 at most two concurrent series downloads. Redirects are not followed.
 
@@ -51,6 +51,8 @@ the download time as FRED's update time. API shutdown cancels active collection.
 | BAMLH0A0HYM2 | High-yield spread, bps | 30-calendar-day change, bps |
 | T10Y2Y | 10Y–2Y spread, bps | 30-calendar-day change, bps |
 | IPMAN | YoY manufacturing production growth, % | Change in YoY growth from prior month, pp |
+| SP500 | S&P 500 daily closing price index; drawdown from 52-week closing high, % | 30-calendar-day price change, % |
+| VIXCLS | VIX daily closing index level | 30-calendar-day change, index points |
 
 For an underlying level X:
 
@@ -59,7 +61,7 @@ For an underlying level X:
 - Quarterly annualized: `100 * ((X[t] / X[t-1 quarter])**4 - 1)`.
 - Published percentage spreads are multiplied by 100 to obtain basis points.
 
-Growth calculations use the seasonally adjusted source levels. GDP and real
+Macroeconomic growth calculations use the seasonally adjusted source levels. GDP and real
 income source levels are already at annual rates; taking their ratios cancels
 that scaling. No second annualization is applied to an already computed growth
 rate. The delinquency comparison subtracts rates, not percentage growth.
@@ -69,6 +71,23 @@ average requires four consecutive weekly dates. Missing observations are not
 silently skipped. Daily and weekly rate comparisons use the last valid reading
 on or before the calendar target. Calendar months clamp at month-end; three
 months does not mean 90 days. Calculations retain precision until presentation.
+
+S&P 500, VIX, and high-yield credit spreads share the Market conditions group.
+The S&P 500 return is `100 * (latest close / comparison close - 1)`, using the
+last valid close on or before 30 calendar days earlier. It measures price change
+and excludes dividends. Drawdown is `100 * (latest close / highest close - 1)`
+for the trailing 52 weeks (364 calendar days), anchored to the latest actual
+observation. The calculation requires history covering the full window and uses
+daily closing values, not intraday highs. The high and its date are available
+under Interpretation & calculation. FRED provides up to ten years of S&P 500
+history; the dashboard retains its usual five-year chart.
+
+VIX is displayed as its published index level. Its 30-day change subtracts the
+comparison level and is expressed in index points, not percentage points or
+basis points. It describes expected volatility, not market direction. Both new
+series use neutral arrows and the same daily cache and native observation dates
+as the other indicators. Upgrading seeds the two new cache entries without
+replacing existing observations or check schedules.
 
 ## Presentation
 
@@ -103,7 +122,7 @@ malformed/oversized responses, source timestamps, cancellation, API routes,
 display formatting, plot gaps, keyboard-compatible charts, and component builds.
 Run the full backend suite, `npm test` (Linux/WSL for deployment shell tests),
 `npm run check`, and `npm run build`. The implementation was also checked against
-live responses for all eleven series using an isolated local cache.
+live responses for all thirteen series using an isolated local cache.
 
 ## Primary references
 
@@ -113,3 +132,5 @@ live responses for all eleven series using an isolated local cache.
 - [10-year yield](https://fred.stlouisfed.org/series/DGS10), [mortgages](https://fred.stlouisfed.org/series/MORTGAGE30US)
 - [High-yield spread and its three-year history limit](https://fred.stlouisfed.org/series/BAMLH0A0HYM2), [yield curve](https://fred.stlouisfed.org/series/T10Y2Y)
 - [Real disposable income](https://fred.stlouisfed.org/series/DSPIC96), [credit card delinquency](https://fred.stlouisfed.org/series/DRCCLACBS)
+
+- [S&P 500 price index and history limit](https://fred.stlouisfed.org/series/SP500), [VIX](https://fred.stlouisfed.org/series/VIXCLS)

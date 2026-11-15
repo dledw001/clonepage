@@ -10,6 +10,7 @@
   const store = new HomeDataStore<EconomySnapshot>('/api/economy', next => dashboardState = next);
   let years = $state(5);
   const indicators = $derived(dashboardState.data?.indicators ?? []);
+  const total = $derived(indicators.length);
   const available = $derived(indicators.filter(item => item.latest).length);
   const checking = $derived(dashboardState.loading || Boolean(dashboardState.data?.refreshing));
   const asOf = $derived(dashboardState.data?.as_of ?? new Date().toISOString());
@@ -29,7 +30,7 @@
 
 <section class="economy" aria-label="Economic dashboard">
   <header class="page-heading">
-    <div class="page-title"><featureIcons.economy size={iconSizes.page}/><div><h1>Economic dashboard</h1><p>U.S. economic conditions · 11 indicators from FRED</p></div></div>
+    <div class="page-title"><featureIcons.economy size={iconSizes.page}/><div><h1>Economic dashboard</h1><p>U.S. economic conditions · {total ? `${total} indicators from FRED` : 'FRED'}</p></div></div>
     <div class="page-actions">
       <div class="history-options" role="group" aria-label="Economic history range">
         {#each [1,5] as range}<button class:active={years === range} aria-pressed={years === range} onclick={() => years = range}>{range} year{range === 1 ? '' : 's'}</button>{/each}
@@ -37,11 +38,11 @@
       <button class="refresh" disabled={checking} onclick={() => store.refresh()} title="Refresh the dashboard. FRED is checked daily, including historical revisions."><RefreshCw size={iconSizes.action}/>{checking ? 'Checking…' : 'Refresh'}</button>
     </div>
   </header>
-  <div class="dashboard-note"><Clock3 size={iconSizes.inline}/><p>Checked daily. Each indicator retains its native release frequency; observation dates differ.</p><span>{available} of 11 available</span></div>
+  <div class="dashboard-note"><Clock3 size={iconSizes.inline}/><p>Checked daily. Each indicator retains its native release frequency; observation dates differ.</p>{#if total}<span>{available} of {total} available</span>{/if}</div>
   {#if dashboardState.error}<p class="notice" role="alert">{dashboardState.error} {dashboardState.data ? 'Your last available dashboard is kept below.' : ''}</p>{/if}
   {#if indicators.some(item => item.error || item.stale) && !checking}<p class="notice" role="status">Some FRED checks are incomplete. Available observations are retained and labeled on each card.</p>{/if}
   {#if dashboardState.loading && !dashboardState.data}<div class="loading" role="status">Loading economic indicators…</div>{/if}
-  {#if checking && available < 11 && dashboardState.data}<p class="loading-inline" role="status">Retrieving available observations from FRED. Indicators appear as each check finishes.</p>{/if}
+  {#if checking && available < total && dashboardState.data}<p class="loading-inline" role="status">Retrieving available observations from FRED. Indicators appear as each check finishes.</p>{/if}
 
   {#each economyGroups as group}
     {@const items = indicators.filter(item => item.group === group)}
@@ -62,14 +63,19 @@
                 <strong>{economyValue(item.change?.value, item.change?.unit ?? 'pp', true)}</strong><span>{item.change?.label ?? 'Comparison unavailable'}</span>
               </div>
               {#if item.id === 'PCEPILFE'}<p class="secondary-value">3-month annualized <strong>{economyValue(item.latest?.secondary, '%')}</strong></p>{/if}
+              {#if item.id === 'SP500'}<p class="secondary-value">From 52-week closing high <strong>{economyValue(item.drawdown?.value, '%', true)}</strong></p>{/if}
               {#if item.error}<p class="card-error" role="status">{item.error} {item.latest ? 'Showing the last successful download.' : 'No observations are available yet.'}</p>{/if}
-              {#if item.history_limit_years && years > item.history_limit_years}<p class="history-note">FRED limits this series to three years; available history is shown.</p>{/if}
+              {#if item.history_limit_years && years > item.history_limit_years}<p class="history-note">FRED limits this series to {item.history_limit_years} years; available history is shown.</p>{/if}
               {#if item.latest}<EconomyChart points={item.points} start={start(item)} {end} unit={item.unit} frequency={item.frequency} title={item.title} secondary={item.id === 'PCEPILFE'}/>{:else}<div class="empty-history">{checking ? 'Waiting for FRED observations…' : 'History unavailable'}</div>{/if}
               <div class="publication"><span>FRED updated</span><time datetime={item.fred_updated_at ?? undefined}>{updatedLabel(item.fred_updated_at)}</time></div>
               <div class="publication"><span>Last checked</span><time datetime={item.checked_at ?? undefined}>{updatedLabel(item.checked_at)}</time></div>
               <details class="context"><summary>Interpretation & calculation</summary><p>{item.interpretation}</p><p>{item.methodology}</p>
                 {#if item.change?.comparison_date}<p>{item.id === 'UNRATE' ? 'Previous three-month period ends' : 'Comparison observation'}: {observationLabel(item.change.comparison_date, item.frequency)}.</p>{/if}
                 {#if item.id === 'UNRATE' && item.change}<p>Latest three-month average: {economyValue(item.change.current_average, '%')}. Preceding three-month average: {economyValue(item.change.previous_average, '%')}.</p>{/if}
+                {#if item.id === 'SP500'}
+                  {#if item.drawdown}<p>52-week closing high: {economyValue(item.drawdown.high, 'index')} on {observationLabel(item.drawdown.high_date, 'Daily')}. Window starts {observationLabel(item.drawdown.window_start, 'Daily')}.</p>
+                  {:else}<p>A full 52-week history of closing values is needed to calculate drawdown.</p>{/if}
+                {/if}
                 <p>Source: {item.source}, via FRED.</p>
                 {#if item.metadata_warning}<p>{item.metadata_warning}</p>{/if}
               </details>

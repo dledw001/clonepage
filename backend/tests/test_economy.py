@@ -29,8 +29,42 @@ def snapshot(series_id, observations):
 
 
 class CalculationTests(unittest.TestCase):
-    def test_allowlist_contains_exactly_eleven_requested_series(self):
-        self.assertEqual(set(BY_ID), set('UNRATE ICSA PCEPILFE GDPC1 DGS10 MORTGAGE30US DSPIC96 DRCCLACBS BAMLH0A0HYM2 T10Y2Y IPMAN'.split()))
+    def test_allowlist_contains_exactly_thirteen_requested_series(self):
+        self.assertEqual(set(BY_ID), set('UNRATE ICSA PCEPILFE GDPC1 DGS10 MORTGAGE30US DSPIC96 DRCCLACBS BAMLH0A0HYM2 T10Y2Y IPMAN SP500 VIXCLS'.split()))
+
+    def test_market_group_contains_equities_volatility_and_credit_risk(self):
+        self.assertEqual([item.id for item in INDICATORS if item.group == 'Market conditions'], ['SP500', 'VIXCLS', 'BAMLH0A0HYM2'])
+
+    def test_equity_change_is_a_price_return_not_index_point_difference(self):
+        card = snapshot('SP500', raw(('2026-10-09', 5000), ('2026-10-12', None), ('2026-10-13', 5100), ('2026-11-11', 5500)))
+        self.assertEqual(card['latest']['value'], 5500)
+        self.assertAlmostEqual(card['change']['value'], 10)
+        self.assertEqual(card['change']['unit'], '%')
+        self.assertEqual(card['change']['comparison_date'], '2026-10-09')
+        self.assertEqual(card['unit'], 'index')
+        self.assertIsNone(snapshot('SP500', raw(('2026-11-11', 5500)))['change']['value'])
+        self.assertIsNone(snapshot('SP500', raw(('2026-10-09', 0), ('2026-11-11', 5500)))['change']['value'])
+
+    def test_vix_level_and_change_remain_index_points(self):
+        card = snapshot('VIXCLS', raw(('2026-10-09', 16), ('2026-10-12', None), ('2026-10-13', 17), ('2026-11-11', 18.7)))
+        self.assertEqual(card['latest']['value'], 18.7)
+        self.assertAlmostEqual(card['change']['value'], 2.7)
+        self.assertEqual(card['change']['unit'], 'points')
+        self.assertEqual(card['change']['comparison_date'], '2026-10-09')
+
+    def test_equity_drawdown_uses_52_week_closing_high_not_old_or_future_peaks(self):
+        card = snapshot('SP500', raw(('2025-01-01', 9000), ('2025-11-12', 5000), ('2025-11-13', 5500), ('2026-06-01', 6000), ('2026-11-12', 5400), ('2026-11-13', None)))
+        self.assertAlmostEqual(card['drawdown']['value'], -10)
+        self.assertEqual(card['drawdown']['high'], 6000)
+        self.assertEqual(card['drawdown']['high_date'], '2026-06-01')
+        self.assertEqual(card['drawdown']['window_start'], '2025-11-13')
+        self.assertEqual(card['latest']['date'], '2026-11-12')
+        at_high = snapshot('SP500', raw(('2025-11-12', 5000), ('2026-11-12', 6000)))
+        self.assertEqual(at_high['drawdown']['value'], 0)
+
+    def test_equity_drawdown_is_unavailable_without_full_window_coverage(self):
+        self.assertIsNone(snapshot('SP500', raw(('2026-06-01', 6000), ('2026-11-12', 5400)))['drawdown'])
+        self.assertIsNone(snapshot('VIXCLS', raw(('2026-11-12', 18.7)))['drawdown'])
 
     def test_calendar_month_subtraction_clamps_end_of_month_and_leap_days(self):
         self.assertEqual(months_before(date(2024, 5, 31), 3), date(2024, 2, 29))
@@ -171,7 +205,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_lazy_snapshot_starts_one_bounded_refresh_and_returns_immediately(self):
         first = await self.gateway.snapshot()
-        self.assertEqual(len(first['indicators']), 11)
+        self.assertEqual(len(first['indicators']), len(INDICATORS))
         self.assertTrue(first['refreshing'])
         self.assertTrue(all(item['latest'] is None for item in first['indicators']))
         task = self.gateway.task
@@ -180,10 +214,27 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         await task
         second = await self.gateway.snapshot()
         self.assertFalse(second['refreshing'])
-        self.assertEqual(len(self.calls), 22)
+        self.assertEqual(len(self.calls), 2 * len(INDICATORS))
         self.assertLessEqual(self.peak, 2)
         self.assertIsNotNone(second['indicators'][0]['checked_at'])
         self.assertTrue(all(request.url.host == 'fred.stlouisfed.org' for request in self.calls))
+
+    async def test_existing_eleven_series_cache_is_preserved_when_market_series_are_added(self):
+        await self.gateway.refresh_due()
+        original = self.row('UNRATE')
+        with main.database() as db:
+            db.execute("DELETE FROM economic_series WHERE id IN ('SP500', 'VIXCLS')")
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM economic_series').fetchone()[0], 11)
+        initialize_economy()
+        self.assertEqual(self.row('UNRATE'), original)
+        self.assertIsNone(self.row('SP500')['observations'])
+        self.assertIsNone(self.row('VIXCLS')['fetched_at'])
+        self.calls.clear()
+        await self.gateway.refresh_due()
+        self.assertEqual(len(self.calls), 4)  # CSV and metadata for just the two new series
+        self.assertIsNotNone(self.row('SP500')['observations'])
+        self.assertIsNotNone(self.row('VIXCLS')['observations'])
+        self.assertEqual(self.row('UNRATE'), original)
 
     async def test_persistent_daily_cache_survives_gateway_restart_and_revises_history(self):
         await self.gateway.refresh_due()
@@ -192,14 +243,14 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(replacement.close)
         await replacement.snapshot()
         self.assertIsNone(replacement.task)
-        self.assertEqual(len(self.calls), 22)
+        self.assertEqual(len(self.calls), 2 * len(INDICATORS))
         self.now += timedelta(seconds=DAY)
         self.revision = 1
         await replacement.refresh_due()
         changed = snapshot('PCEPILFE', json.loads(self.row('PCEPILFE')['observations']))['latest']['value']
         self.assertNotEqual(original, changed)
         self.assertAlmostEqual(changed, 100 * (105 / 101 - 1))
-        self.assertEqual(len(self.calls), 44)
+        self.assertEqual(len(self.calls), 4 * len(INDICATORS))
 
     async def test_partial_failure_retains_data_and_retries_only_due_series(self):
         await self.gateway.refresh_due()

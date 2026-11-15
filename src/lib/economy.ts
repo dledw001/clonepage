@@ -3,12 +3,13 @@ export type EconomyChange = { value: number | null; unit: string; label: string;
 export type EconomicIndicator = {
   id: string; title: string; group: string; frequency: string; source: string; adjustment: string;
   unit: string; basis: string; interpretation: string; methodology: string; history_limit_years: number | null;
+  drawdown: { value: number; high: number; high_date: string; window_start: string } | null;
   source_url: string; latest: EconomyPoint | null; change: EconomyChange | null; points: EconomyPoint[];
   checked_at: string | null; fetched_at: string | null; fred_updated_at: string | null; next_check_at: string | null;
   stale: boolean; error: string | null; metadata_warning: string | null;
 };
 export type EconomySnapshot = { indicators: EconomicIndicator[]; refreshing: boolean; as_of: string };
-export const economyGroups = ['Labor market', 'Inflation & growth', 'Interest rates & financial conditions', 'Household finances'];
+export const economyGroups = ['Labor market', 'Inflation & growth', 'Interest rates & financial conditions', 'Market conditions', 'Household finances'];
 
 export function observationLabel(value: string | null | undefined, frequency: string) {
   if (!value) return 'Not available';
@@ -29,7 +30,7 @@ export function economyValue(value: number | null | undefined, unit: string, sig
   if (value == null || !Number.isFinite(value)) return '—';
   const rounded = Math.abs(value) < .5 * 10 ** -digits ? 0 : value;
   const text = new Intl.NumberFormat('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits, signDisplay: signed ? 'exceptZero' : 'auto' }).format(rounded);
-  return unit === '%' ? text + '%' : text + (unit === 'claims' ? '' : ` ${unit}`);
+  return unit === '%' ? text + '%' : text + (unit === 'claims' || unit === 'index' ? '' : ` ${unit}`);
 }
 
 export function movement(change: EconomyChange | null) {

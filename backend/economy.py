@@ -44,8 +44,10 @@ INDICATORS = (
     Indicator("IPMAN", "Manufacturing production", "Inflation & growth", "Monthly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "yoy", "%", "Year-over-year growth", "Rising growth generally indicates strengthening manufacturing activity.", "100 × (manufacturing industrial production index / index 12 months earlier − 1). Change compares YoY growth with the prior month."),
     Indicator("DGS10", "10-year Treasury yield", "Interest rates & financial conditions", "Daily", "Board of Governors of the Federal Reserve System", "Not seasonally adjusted", "rate30", "%", "Treasury yield", "A rising yield means higher long-term borrowing costs; the economic implications depend on its drivers.", "Current yield minus the closest available yield on or before 30 calendar days earlier, in percentage points."),
     Indicator("MORTGAGE30US", "30-year mortgage rate", "Interest rates & financial conditions", "Weekly", "Freddie Mac", "Not seasonally adjusted", "mortgage", "%", "30-year fixed mortgage average", "A rising rate generally worsens financing affordability.", "Current rate minus the closest available rate on or before three calendar months earlier, in percentage points."),
-    Indicator("BAMLH0A0HYM2", "High-yield credit spread", "Interest rates & financial conditions", "Daily", "ICE Data Indices, LLC", "Not seasonally adjusted", "spread", "bps", "Option-adjusted spread", "A rising spread generally indicates greater perceived credit risk.", "Published percentage value × 100 gives basis points. Change compares with the closest available observation on or before 30 calendar days earlier.", 3),
     Indicator("T10Y2Y", "10Y–2Y Treasury spread", "Interest rates & financial conditions", "Daily", "Federal Reserve Bank of St. Louis", "Not seasonally adjusted", "spread", "bps", "10-year minus 2-year yield", "A rising spread means a steepening yield curve; interpretation depends on what is moving the two yields.", "Published percentage value × 100 gives basis points. Change compares with the closest available observation on or before 30 calendar days earlier."),
+    Indicator("SP500", "S&P 500", "Market conditions", "Daily", "S&P Dow Jones Indices LLC", "Not seasonally adjusted", "equity", "index", "Price index · daily close", "The index tracks large-cap U.S. stock prices. Rising prices describe market performance, not the condition of the whole economy.", "30-day price change = 100 × (latest close / last valid close on or before 30 calendar days earlier − 1). Drawdown = 100 × (latest close / highest daily close in the trailing 52 weeks − 1). Dividends are excluded; the high is based on closing values, not intraday prices.", 10),
+    Indicator("VIXCLS", "VIX", "Market conditions", "Daily", "Chicago Board Options Exchange", "Not seasonally adjusted", "volatility", "index", "Expected volatility · index level", "VIX reflects options-implied expectations of near-term S&P 500 volatility. A rising level signals greater expected uncertainty; it does not predict market direction.", "The published VIX index level is shown without converting it to a percentage or basis points. The 30-day change subtracts the last valid level on or before 30 calendar days earlier and is expressed in index points."),
+    Indicator("BAMLH0A0HYM2", "High-yield credit spread", "Market conditions", "Daily", "ICE Data Indices, LLC", "Not seasonally adjusted", "spread", "bps", "Option-adjusted spread", "A rising spread generally indicates greater perceived credit risk.", "Published percentage value × 100 gives basis points. Change compares with the closest available observation on or before 30 calendar days earlier.", 3),
     Indicator("DSPIC96", "Real disposable income", "Household finances", "Monthly", "U.S. Bureau of Economic Analysis", "Seasonally adjusted annual rate", "yoy", "%", "Year-over-year growth", "Rising real income growth generally indicates improving household purchasing power.", "100 × (real disposable personal income / income 12 months earlier − 1). Change compares YoY growth with the prior month."),
     Indicator("DRCCLACBS", "Credit card delinquency", "Household finances", "Quarterly", "Board of Governors of the Federal Reserve System", "Seasonally adjusted", "delinquency", "%", "Delinquency rate", "A rising rate generally indicates increasing household financial stress.", "Current delinquency rate minus the rate four quarters earlier, in percentage points."),
 )
@@ -158,11 +160,13 @@ def change_for(indicator, latest, points, observations):
         return {"value": delta, "unit": unit, "label": "3-month trend", "comparison_date": months_before(day, 3).isoformat(),
                 "current_average": sum(six[:3]) / 3 if all(value is not None for value in six[:3]) else None,
                 "previous_average": sum(six[3:]) / 3 if all(value is not None for value in six[3:]) else None}
-    if indicator.transform in ("spread", "rate30", "mortgage"):
+    if indicator.transform in ("spread", "rate30", "mortgage", "equity", "volatility"):
         target = months_before(day, 3) if indicator.transform == "mortgage" else day - timedelta(days=30)
         previous = next((row for row in reversed(points) if row["date"] <= target.isoformat() and row["value"] is not None), None)
         label = "3-month change" if indicator.transform == "mortgage" else "30-day change"
-        unit = "bps" if indicator.transform == "spread" else "pp"
+        unit = {"spread": "bps", "equity": "%", "volatility": "points"}.get(indicator.transform, "pp")
+        if indicator.transform == "equity":
+            label = "30-day price change"
         if previous:
             comparison_date, comparison_value = previous["date"], previous["value"]
     else:
@@ -175,8 +179,23 @@ def change_for(indicator, latest, points, observations):
         else:
             comparison_date = months_before(day, 1).isoformat()
         comparison_value = values.get(comparison_date)
-    delta = latest["value"] - comparison_value if comparison_value is not None else None
+    delta = (growth(latest["value"], comparison_value) if indicator.transform == "equity"
+             else latest["value"] - comparison_value if comparison_value is not None else None)
     return {"value": delta, "unit": unit, "label": label, "comparison_date": comparison_date}
+
+
+def equity_drawdown(latest, points):
+    """Drawdown from daily closing highs; require coverage of the full window."""
+    if latest is None or latest["value"] <= 0:
+        return None
+    cutoff = (date.fromisoformat(latest["date"]) - timedelta(weeks=52)).isoformat()
+    valid = [point for point in points if point["value"] is not None and point["value"] > 0 and point["date"] <= latest["date"]]
+    if not any(point["date"] <= cutoff for point in valid):
+        return None
+    window = [point for point in valid if point["date"] >= cutoff]
+    peak = max(window, key=lambda point: (point["value"], point["date"]))
+    return {"value": growth(latest["value"], peak["value"]), "high": peak["value"],
+            "high_date": peak["date"], "window_start": cutoff}
 
 
 def present(indicator, row, now):
@@ -195,6 +214,7 @@ def present(indicator, row, now):
             "source": indicator.source, "adjustment": indicator.adjustment, "unit": indicator.unit, "basis": indicator.basis,
             "interpretation": indicator.interpretation, "methodology": indicator.methodology, "history_limit_years": indicator.history_limit,
             "source_url": FRED + "/series/" + indicator.id, "latest": latest, "change": change,
+            "drawdown": equity_drawdown(latest, points) if indicator.transform == "equity" else None,
             "points": history, "checked_at": row.get("checked_at"), "fetched_at": row.get("fetched_at"),
             "fred_updated_at": row.get("fred_updated_at"), "next_check_at": row.get("next_check_at"),
             "stale": bool(row.get("error")) or not row.get("fetched_at") or (now - datetime.fromisoformat(row["fetched_at"])).total_seconds() >= DAY,

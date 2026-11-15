@@ -18,6 +18,10 @@ test('display formatting distinguishes rates, percentage points, basis points, a
   assert.equal(economyValue(3.12,'%'),'3.12%');
   assert.equal(economyValue(.25,'pp',true),'+0.25 pp');
   assert.equal(economyValue(320,'bps'),'320 bps');
+  assert.equal(economyValue(7561.67,'index'),'7,561.67');
+  assert.equal(economyValue(18.7,'index'),'18.70');
+  assert.equal(economyValue(2.7,'points',true),'+2.70 points');
+  assert.equal(economyValue(-10,'%',true),'-10.00%');
   assert.equal(economyValue(195250,'claims'),'195,250');
   assert.equal(economyValue(-.0000001,'pp',true),'0.00 pp');
   assert.equal(economyValue(null,'%'),'—');
@@ -32,7 +36,8 @@ test('direction describes displayed movement without positive or negative econom
 test('history ranges clamp leap days rather than drifting into March',()=>{
   assert.equal(historyStart('2024-02-29T18:00:00Z',1),'2023-02-28');
   assert.equal(historyStart('2026-11-14T18:00:00Z',5),'2021-11-14');
-  assert.equal(economyGroups.length,4);
+  assert.equal(economyGroups.length,5);
+  assert.ok(economyGroups.includes('Market conditions'));
 });
 test('plots preserve native dates, gaps, negative values, and the end of released history',()=>{
   const points=[{date:'2026-01-01',value:-25,secondary:null},{date:'2026-02-01',value:null,secondary:null},{date:'2026-03-01',value:27,secondary:30}];
