@@ -3,7 +3,7 @@ export type MonitorTarget = { kind: 'container' | 'project'; watcher: string; pr
 export type Shortcut = { id: string; name: string; description: string; aliases: string[]; icon: string;
   color: string; action: 'open' | 'copy'; value: string; group?: string; monitor?: MonitorTarget | null; availability?: boolean };
 export type ShortcutDraft = Omit<Shortcut, 'id'>;
-export type ShortcutSnapshot = { items: Shortcut[]; revision: number };
+export type ShortcutSnapshot = { items: Shortcut[]; revision: number; favorite_ids?: string[] };
 export type ShortcutState = ShortcutSnapshot & { loaded: boolean; loading: boolean; busy: boolean; conflict: boolean; error: string };
 
 export type ShortcutGroup = { name: string; items: Shortcut[] };
@@ -32,6 +32,12 @@ export function moveShortcutGroup(items: Shortcut[], name: string, offset: numbe
   if (from < 0 || to < 0 || to >= groups.length) return items.map(item => item.id);
   [groups[from], groups[to]] = [groups[to], groups[from]];
   return groups.flatMap(group => group.items.map(item => item.id));
+}
+
+/** Favorites have an independent order; ignore deleted IDs in cached responses. */
+export function favoriteShortcuts(snapshot: Pick<ShortcutSnapshot, 'items' | 'favorite_ids'>): Shortcut[] {
+  const byId = new Map(snapshot.items.map(item => [item.id, item]));
+  return [...new Set(snapshot.favorite_ids ?? [])].flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
 }
 
 export class ShortcutStore {
@@ -119,6 +125,21 @@ export class ShortcutStore {
   }
   renameGroup(name: string, newName: string, revision: number) {
     return this.write('/groups', { method: 'PUT', body: JSON.stringify({ name, new_name: newName, revision }) });
+  }
+  setFavorites(ids: string[], revision = this.state.revision) {
+    if (new Set(ids).size !== ids.length || ids.some(id => !this.state.items.some(item => item.id === id))) return Promise.resolve(false);
+    return this.write('/favorites', { method: 'PUT', body: JSON.stringify({ ids, revision }) });
+  }
+  toggleFavorite(id: string) {
+    const ids = favoriteShortcuts(this.state).map(item => item.id);
+    return this.setFavorites(ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id]);
+  }
+  moveFavorite(id: string, offset: number) {
+    const ids = favoriteShortcuts(this.state).map(item => item.id);
+    const from = ids.indexOf(id), to = from + offset;
+    if (from < 0 || to < 0 || to >= ids.length) return Promise.resolve(false);
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    return this.setFavorites(ids);
   }
   async reorder(ids: string[], revision = this.state.revision) {
     if (this.disposed || this.state.busy) return false;

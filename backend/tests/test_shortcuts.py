@@ -41,7 +41,7 @@ class ShortcutTests(unittest.TestCase):
         data = self.read()
         expected = json.loads(Path(shortcuts.__file__).with_name('shortcut_defaults.json').read_text(encoding='utf-8'))
         expected = [dict(item, group='', monitor=None, availability=False) for item in expected]
-        self.assertEqual(data, {'items': expected, 'revision': 0})
+        self.assertEqual(data, {'items': expected, 'revision': 0, 'favorite_ids': []})
         self.assertEqual(data['items'][0]['value'], 'https://dsm.dledwith.com')
         self.assertEqual(data['items'][2]['value'], 'https://qbit.dledwith.com')
         self.assertEqual(data['items'][4]['action'], 'copy')
@@ -151,12 +151,16 @@ class ShortcutTests(unittest.TestCase):
             db.execute("ALTER TABLE shortcuts DROP COLUMN group_name")
             db.execute("ALTER TABLE shortcuts DROP COLUMN monitor")
             db.execute("ALTER TABLE shortcuts DROP COLUMN availability")
+            db.execute("ALTER TABLE shortcut_settings DROP COLUMN favorite_ids")
         shortcuts.initialize_shortcuts()
         data=self.read()
         self.assertEqual(data['revision'],8)
         self.assertEqual(data['items'][0]['name'],'My downloads')
         self.assertTrue(all(item['group']=='' and item['monitor'] is None and item['availability'] is False for item in data['items']))
         self.assertEqual(len(data['items']),7)
+        self.assertEqual(data['favorite_ids'],[])
+        shortcuts.initialize_shortcuts()
+        self.assertEqual(self.read(),data)
 
     def test_older_client_update_keeps_organization_and_copy_conversion_clears_monitoring(self):
         target={'kind':'project','watcher':'local','project':'media'}
@@ -219,6 +223,72 @@ class ShortcutTests(unittest.TestCase):
         for changes in [{'availability':'yes'}, {'availability':1}, {'action':'copy','availability':True}]:
             self.assertEqual(self.create(changes).status_code,422)
         self.assertEqual(self.read(),before)
+
+
+    def favorites(self, ids, revision=None):
+        return self.client.put('/api/shortcuts/favorites', json={
+            'ids':ids, 'revision':self.read()['revision'] if revision is None else revision})
+
+    def test_favorites_persist_with_an_independent_order_including_copy_actions(self):
+        before=self.read(); ids=[item['id'] for item in before['items']]
+        favorites=[ids[4],ids[2],ids[0]]
+        response=self.favorites(favorites)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['favorite_ids'],favorites)
+        self.assertEqual(response.json()['items'],before['items'])
+        reordered=self.client.put('/api/shortcuts/order',json={'ids':ids[::-1],'revision':response.json()['revision']})
+        self.assertEqual(reordered.status_code,200)
+        self.assertEqual(reordered.json()['favorite_ids'],favorites)
+        shortcuts.initialize_shortcuts()
+        self.assertEqual(self.read(),reordered.json())
+        other=TestClient(main.app)
+        self.assertEqual(other.get('/api/shortcuts').json()['favorite_ids'],favorites)
+
+    def test_invalid_favorites_leave_the_entire_snapshot_unchanged(self):
+        before=self.read(); shortcut_id=before['items'][0]['id']
+        for ids in [[shortcut_id,shortcut_id],['missing'],[shortcut_id,'missing']]:
+            with self.subTest(ids=ids):
+                response=self.favorites(ids)
+                self.assertEqual(response.status_code,422,response.text)
+                self.assertEqual(self.read(),before)
+        self.assertEqual(self.client.put('/api/shortcuts/favorites',json={'ids':[]}).status_code,422)
+
+    def test_concurrent_favorites_saves_allow_only_one_matching_revision(self):
+        before=self.read(); ids=[item['id'] for item in before['items'][:2]]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses=list(pool.map(lambda item:self.favorites([item],before['revision']),ids))
+        self.assertEqual(sorted(response.status_code for response in responses),[200,409])
+        latest=self.read()
+        self.assertEqual(latest['revision'],before['revision']+1)
+        self.assertIn(latest['favorite_ids'],[[ids[0]],[ids[1]]])
+        self.assertEqual(self.favorites([],before['revision']).status_code,409)
+        self.assertEqual(self.read(),latest)
+
+    def test_deleting_a_favorite_prunes_it_atomically_and_empty_favorites_stay_empty(self):
+        ids=[item['id'] for item in self.read()['items'][:2]]
+        saved=self.favorites(ids).json()
+        deleted=self.client.delete('/api/shortcuts/'+ids[0],params={'revision':saved['revision']})
+        self.assertEqual(deleted.status_code,200)
+        self.assertEqual(deleted.json()['favorite_ids'],[ids[1]])
+        self.assertEqual(deleted.json()['revision'],saved['revision']+1)
+        cleared=self.favorites([])
+        self.assertEqual(cleared.status_code,200)
+        shortcuts.initialize_shortcuts()
+        self.assertEqual(self.read()['favorite_ids'],[])
+        with main.database() as db:
+            self.assertEqual(json.loads(db.execute('SELECT favorite_ids FROM shortcut_settings WHERE id=1').fetchone()[0]),[])
+
+    def test_older_client_edits_and_service_creation_preserve_favorites(self):
+        before=self.read(); item=before['items'][0]
+        self.favorites([item['id']])
+        draft=self.draft();draft.update(name='A new name',revision=self.read()['revision'])
+        edited=self.client.put('/api/shortcuts/'+item['id'],json=draft)
+        self.assertEqual(edited.status_code,200,edited.text)
+        self.assertEqual(edited.json()['favorite_ids'],[item['id']])
+        created=self.create({'group':'Media'})
+        self.assertEqual(created.json()['favorite_ids'],[item['id']])
+        shortcut=next(value for value in created.json()['items'] if value['id']==item['id'])
+        self.assertEqual(shortcut['name'],'A new name')
 
 
 if __name__ == '__main__': unittest.main()

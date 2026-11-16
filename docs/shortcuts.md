@@ -6,6 +6,12 @@ The editor offers 64 searchable Lucide icons, the existing muted color palette, 
 
 Shortcuts live in the existing SQLite database (`READING_DB_PATH`), so the normal data-directory backup includes them. Other devices fetch changes when the page becomes visible or gains focus. Saves update the current page immediately.
 
+## Favorites and quick access
+
+An icon-only **Favorites** bar appears below the header on every page. Hover or focus an icon with the keyboard to see its name. On a touchscreen, tap to open; hold briefly to reveal the name without opening it. Names remain available to screen readers. **All shortcuts**, header Search, and Ctrl/Cmd+K open the same launcher, with labeled favorites first and remaining shortcuts organized by group.
+
+Choose **Choose favorites** on an empty bar, or **Edit favorites** in the launcher, to pin or unpin shortcuts. The arrows in Edit favorites change their order independently of the grouped cards. You can also use the pin buttons in **Manage shortcuts**. Favorites start empty, are saved in the shared database, and sync across devices. Removing a shortcut removes it from favorites too; editing its name, icon, or address updates both places. Both website and copy-text shortcuts can be pinned.
+
 ## Groups
 
 Use the optional **Shortcut group** field when adding or editing a shortcut. Choose an existing name or type a new one, such as Media or Infrastructure. Names ignore capitalization when joining an existing group. Leave it blank for ungrouped shortcuts. Existing shortcuts remain ungrouped until you assign them; an entirely ungrouped list keeps the original layout.
@@ -50,11 +56,12 @@ The migration defaults are in `backend/shortcut_defaults.json`. The shared icon/
 
 ## API and conflicts
 
-- `GET /api/shortcuts`: ordered items and collection revision.
+- `GET /api/shortcuts`: ordered items, collection revision, and ordered `favorite_ids`.
 - `GET /api/shortcuts/availability`: cached results for opted-in website shortcuts; schedules due checks without blocking the response.
 - `POST /api/shortcuts`: create a shortcut.
 - `PUT /api/shortcuts/{id}`: replace its editable fields.
 - `DELETE /api/shortcuts/{id}?revision=N`: delete a shortcut.
+- `PUT /api/shortcuts/favorites`: save an ordered subset of current shortcut IDs (`ids`, `revision`); empty clears favorites.
 - `PUT /api/shortcuts/order`: save the complete ordered ID list (including all groups).
 - `PUT /api/shortcuts/groups`: rename a group, or clear its name to ungroup its members.
 

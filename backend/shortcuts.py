@@ -55,6 +55,9 @@ def initialize_shortcuts():
             db.execute("ALTER TABLE shortcuts ADD COLUMN monitor TEXT DEFAULT NULL")
         if "availability" not in columns:
             db.execute("ALTER TABLE shortcuts ADD COLUMN availability INTEGER NOT NULL DEFAULT 0")
+        settings_columns = {row["name"] for row in db.execute("PRAGMA table_info(shortcut_settings)")}
+        if "favorite_ids" not in settings_columns:
+            db.execute("ALTER TABLE shortcut_settings ADD COLUMN favorite_ids TEXT NOT NULL DEFAULT '[]'")
         if db.execute("SELECT 1 FROM shortcut_settings WHERE id = 1").fetchone():
             return
         defaults = json.loads(Path(__file__).with_name("shortcut_defaults.json").read_text(encoding="utf-8"))
@@ -190,7 +193,10 @@ def snapshot(db):
         item["group"] = item.pop("group_name")
         item["monitor"] = json.loads(item["monitor"]) if item["monitor"] else None
         items.append(item)
-    return {"items": items, "revision": db.execute("SELECT revision FROM shortcut_settings WHERE id = 1").fetchone()[0]}
+    settings = db.execute("SELECT revision, favorite_ids FROM shortcut_settings WHERE id = 1").fetchone()
+    current_ids = {item["id"] for item in items}
+    return {"items": items, "revision": settings["revision"],
+            "favorite_ids": [item_id for item_id in json.loads(settings["favorite_ids"]) if item_id in current_ids]}
 
 
 def check_revision(db, revision):
@@ -273,6 +279,17 @@ def reorder_shortcuts(order: ShortcutOrder):
         return changed(db)
 
 
+@router.put("/favorites")
+def save_favorites(order: ShortcutOrder):
+    with database() as db:
+        check_revision(db, order.revision)
+        current = {row[0] for row in db.execute("SELECT id FROM shortcuts")}
+        if len(order.ids) != len(set(order.ids)) or not set(order.ids).issubset(current):
+            raise HTTPException(422, "Favorites must contain existing shortcuts without duplicates.")
+        db.execute("UPDATE shortcut_settings SET favorite_ids = ? WHERE id = 1", (json.dumps(order.ids),))
+        return changed(db)
+
+
 @router.put("/{shortcut_id}")
 def update_shortcut(shortcut_id: str, item: ShortcutWrite):
     # language=SQL
@@ -304,4 +321,6 @@ def delete_shortcut(shortcut_id: str, revision: int = Query(ge=0)):
         check_revision(db, revision)
         if db.execute("DELETE FROM shortcuts WHERE id = ?", (shortcut_id,)).rowcount == 0:
             raise HTTPException(404, "This shortcut no longer exists.")
+        favorites = json.loads(db.execute("SELECT favorite_ids FROM shortcut_settings WHERE id = 1").fetchone()[0])
+        db.execute("UPDATE shortcut_settings SET favorite_ids = ? WHERE id = 1", (json.dumps([item for item in favorites if item != shortcut_id]),))
         return changed(db)

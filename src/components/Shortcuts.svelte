@@ -1,7 +1,7 @@
 <script lang="ts">
   import { featureIcons, iconSizes } from '../lib/icons';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
-  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, Pencil, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, Pencil, Pin, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
   import { AvailabilityStore, availabilityStatus, emptyAvailability } from '../lib/availability';
   import SectionHeader from './SectionHeader.svelte';
@@ -383,6 +383,7 @@
         {#each arrangedItems as item (item.id)}{@const Icon = shortcutIcon(item.icon)}
           <div class="managed-row"><span class="managed-icon" style:color={item.color}><Icon size={iconSizes.shortcut} /></span><div class="managed-name"><strong>{item.name}</strong><small>{item.group ? `${item.group} · ` : ''}{item.description || (item.action === 'copy' ? 'Copy text' : item.value)}</small></div>
             <div class="row-actions"><button class="small-icon" disabled={!canMove(item, -1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} up`} title="Move up" onclick={() => store.move(item.id, -1)}><ArrowUp size={iconSizes.action} /></button><button class="small-icon" disabled={!canMove(item, 1) || data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Move ${item.name} down`} title="Move down" onclick={() => store.move(item.id, 1)}><ArrowDown size={iconSizes.action} /></button>
+              <button class="small-icon" class:pinned={data.favorite_ids?.includes(item.id)} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`${data.favorite_ids?.includes(item.id)?'Unpin':'Pin'} ${item.name}`} aria-pressed={Boolean(data.favorite_ids?.includes(item.id))} title={data.favorite_ids?.includes(item.id)?'Unpin favorite':'Pin favorite'} onclick={()=>store.toggleFavorite(item.id)}><Pin size={iconSizes.action}/></button>
               <button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Edit ${item.name}`} title="Edit" onclick={() => edit(item)}><Pencil size={iconSizes.action} /></button><button class="small-icon" disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null} aria-label={`Delete ${item.name}`} title="Delete" onclick={() => deleting = deleting === item.id ? null : item.id}><Trash2 size={iconSizes.action} /></button></div>
           </div>
           {#if deleting === item.id}<div class="delete-confirm" role="group" aria-label={`Confirm deleting ${item.name}`}><span>Delete “{item.name}”?</span><button disabled={data.busy} onclick={() => deleting = null}>Keep shortcut</button><button class="delete-button" disabled={data.busy} onclick={() => remove(item.id)}>Delete shortcut</button></div>{/if}
@@ -453,6 +454,7 @@
   .drag-status:empty { display: none; }
 
   .manager-heading, .editor-heading, .editor-primary, .row-actions, .managed-row, .editor-footer, .color-picker, .delete-confirm { display: flex; align-items: center; gap: 10px; }
+  .small-icon.pinned { color:var(--highlight); background:var(--surface-hover); }
   .manager-add-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
   button, input, select, textarea { font: inherit; }
   button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
@@ -501,5 +503,5 @@
   .shortcut-status, .shortcut-error { font-size: var(--font-body); line-height: 1.8; color: var(--muted); }
   .shortcut-error { color: var(--warning); }
   .shortcut-error button { color: var(--highlight); margin-left: 12px; }
-  @media (max-width: 650px) { .manager-heading { align-items: flex-start; gap: 15px; } .shortcut-manager { padding: 18px; } .shortcut-editor { padding: 16px; } .editor-fields { grid-template-columns: 1fr; } .appearance { grid-template-columns: 1fr; gap: 20px; } .preview { max-width: 210px; } .row-actions { gap: 0; } .small-icon { padding: 7px 5px; } }
+  @media (max-width: 650px) { .manager-heading { align-items: flex-start; flex-direction:column; gap:15px; } .manager-add-actions { justify-content:flex-start; } .managed-row { display:grid; grid-template-columns:32px minmax(0,1fr); gap:8px 10px; } .managed-name strong { overflow-wrap:anywhere; } .row-actions { grid-column:1/-1; justify-content:flex-end; } .row-actions .small-icon { min-width:36px; min-height:44px; } .shortcut-manager { padding: 18px; } .shortcut-editor { padding: 16px; } .editor-fields { grid-template-columns: 1fr; } .appearance { grid-template-columns: 1fr; gap: 20px; } .preview { max-width: 210px; } .row-actions { gap: 0; } .small-icon { padding: 7px 5px; } }
 </style>

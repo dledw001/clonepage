@@ -6,6 +6,7 @@
   import { Command, Moon, Search, Sun, Settings2 } from '@lucide/svelte';
 
   import CommandPalette from './components/CommandPalette.svelte';
+  import FavoriteShortcuts from './components/FavoriteShortcuts.svelte';
   import ReadingList from './components/ReadingList.svelte';
   import Feeds from './components/Feeds.svelte';
   import HackerNews from './components/HackerNews.svelte';
@@ -34,6 +35,7 @@
 
   let now = $state(new Date());
   let paletteOpen = $state(false);
+  let editingFavorites = $state(false);
   let theme = $state<'dark' | 'light'>('dark');
   let toast = $state('');
 
@@ -105,7 +107,8 @@
     navigation?.backToList();
   }
 
-  async function openSearch() {
+  async function openSearch(editFavorites = false) {
+    editingFavorites=editFavorites;
     paletteOpen=true;
     await tick();
     searchPalette?.focusSearch();
@@ -176,7 +179,7 @@
       </nav>
 
       <div class="top-actions">
-        <button class="header-search" aria-label="Search shortcuts or the web" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls={paletteOpen?'command-search':undefined} onclick={openSearch}><Search size={iconSizes.action}/><span>Search</span><kbd>Ctrl K</kbd></button>
+        <button class="header-search" aria-label="Search shortcuts or the web" aria-haspopup="dialog" aria-expanded={paletteOpen} aria-controls={paletteOpen?'command-search':undefined} onclick={() => openSearch()}><Search size={iconSizes.action}/><span>Search</span><kbd>Ctrl K</kbd></button>
         {#if page==='home'}<button class="icon-button" aria-label="Customize homepage" title="Customize homepage" aria-expanded={customizingHome} onclick={()=>customizingHome=!customizingHome}><Settings2 size={iconSizes.action}/></button>{/if}
         <button
           class="icon-button"
@@ -191,6 +194,8 @@
         </button>
       </div>
     </header>
+
+    <FavoriteShortcuts data={shortcutState} onopen={openSearch} onexecute={execute}/>
 
     <main>
       {#if page === 'reader'}
@@ -228,7 +233,7 @@
 
   </div>
 
-  {#if paletteOpen}<CommandPalette bind:this={searchPalette} commands={shortcutState.items} loaded={shortcutState.loaded} loading={shortcutState.loading} onexecute={execute} onclose={()=>paletteOpen=false}/>{/if}
+  {#if paletteOpen}<CommandPalette bind:this={searchPalette} commands={shortcutState.items} loaded={shortcutState.loaded} loading={shortcutState.loading} favoriteIds={shortcutState.favorite_ids ?? []} busy={shortcutState.busy} error={shortcutState.error} initialEditing={editingFavorites} onpin={id=>shortcutStore.toggleFavorite(id)} onmove={(id,offset)=>shortcutStore.moveFavorite(id,offset)} onrefresh={()=>shortcutStore.refresh()} onexecute={execute} onclose={()=>paletteOpen=false}/>{/if}
   {#if toast}
     <div class="toast">
       <Command size={iconSizes.action} />
