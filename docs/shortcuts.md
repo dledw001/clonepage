@@ -6,6 +6,12 @@ The editor offers 76 searchable Lucide icons, the existing muted color palette, 
 
 Shortcuts live in the existing SQLite database (`READING_DB_PATH`), so the normal data-directory backup includes them. Other devices fetch changes when the page becomes visible or gains focus. Saves update the current page immediately.
 
+## Minimize Your Places
+
+Use the chevron in the Your Places header to minimize or expand its cards. The header, shortcut count, and Manage shortcuts remain visible; Favorites is unaffected. The widget starts expanded and remembers your choice in this browser on this device, independently of your other devices. If browser storage is unavailable, the button still works for the current page.
+
+Manage shortcuts temporarily expands a minimized widget. Done restores your preferred view. The minimize button is disabled while editing a shortcut, configuring a service, renaming a group, dragging, or saving so drafts and in-progress actions stay visible. Load/save errors remain visible even when the cards are minimized.
+
 ## Favorites and quick access
 
 An icon-only **Favorites** bar appears below the header on every page. Hover or focus an icon with the keyboard to see its name. On a touchscreen, tap to open; hold briefly to reveal the name without opening it. Names remain available to screen readers. **All shortcuts**, header Search, and Ctrl/Cmd+K open the same launcher, with labeled favorites first and remaining shortcuts organized by group.

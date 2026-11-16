@@ -238,7 +238,7 @@ html:has(dialog[open]) { overflow:hidden; }
 main {
     width: 100%;
     flex: 1;
-    margin-top:14px;
+    margin-top:var(--section-gap);
 }
 
 h1 {

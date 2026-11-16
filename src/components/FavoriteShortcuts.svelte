@@ -71,7 +71,7 @@
 {#if hint}<div class="favorite-name" id="favorite-shortcut-name" role="tooltip" bind:this={tooltip} style:left={`${hint.x}px`} style:top={`${hint.y}px`}>{hint.label}</div>{/if}
 
 <style>
-  .favorite-bar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; width:100%; max-width:1060px; margin:13px auto 0; }
+  .favorite-bar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; width:100%; max-width:1060px; margin:var(--section-gap) auto 0; }
   .favorite-heading { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:var(--font-caption); }
   .favorite-list { display:flex; flex:1; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
   .favorite-control { width:46px; height:46px; display:grid; place-items:center; flex-shrink:0; padding:0; border:1px solid var(--line); border-radius:11px; background:var(--surface); color:var(--favorite-color,var(--highlight)); text-decoration:none; touch-action:pan-y; -webkit-touch-callout:none; user-select:none; }

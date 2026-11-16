@@ -1,7 +1,7 @@
 <script lang="ts">
   import { featureIcons, iconSizes } from '../lib/icons';
   import { onDestroy, onMount, tick, untrack } from 'svelte';
-  import { ArrowDown, ArrowUp, ArrowUpRight, Check, CircleHelp, Copy, GripVertical, Pencil, Pin, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
+  import { ArrowDown, ArrowUp, ArrowUpRight, Check, ChevronDown, ChevronUp, CircleHelp, Copy, GripVertical, Pencil, Pin, Plus, Settings2, Trash2, TriangleAlert, X } from '@lucide/svelte';
   import { shortcutCatalog, shortcutIcon } from '../lib/shortcut-icons';
   import { AvailabilityStore, availabilityStatus, emptyAvailability } from '../lib/availability';
   import SectionHeader from './SectionHeader.svelte';
@@ -14,6 +14,18 @@
   let { data, store, onexecute, onmonitor, active = true }: { data: ShortcutState; store: ShortcutStore; onexecute: (item: Shortcut) => void;
     onmonitor?: (event: MouseEvent, path: string) => void; active?: boolean } = $props();
   let managing = $state(false);
+  let minimized = $state(false);
+  const collapsed = $derived(minimized && !managing);
+  const contentId = $props.id();
+  const minimizePreference = 'clonepage-shortcuts-minimized';
+  function toggleMinimized() {
+    const next = !collapsed;
+    managing = false;
+    deleting = null;
+    availabilitySelection = null;
+    minimized = next;
+    try { localStorage.setItem(minimizePreference, String(next)); } catch { /* Keep the control usable when browser storage is unavailable. */ }
+  }
   let serviceOpen = $state(false);
   $effect(() => { if (!active) serviceOpen = false; });
   let editorOpen = $state(false);
@@ -59,6 +71,7 @@
     }
   });
   onMount(() => {
+    try { minimized = localStorage.getItem(minimizePreference) === 'true'; } catch { /* Default to expanded when browser storage is unavailable. */ }
     const refresh = () => { if (active && !document.hidden && checkedShortcuts.length) void availabilityStore.refresh(); };
     const timer = setInterval(refresh, 60000);
     const clock = setInterval(() => availabilityNow = Date.now(), 15000);
@@ -306,13 +319,19 @@
   {/if}
 {/snippet}
 
-<section class="shortcuts home-surface" aria-label="Your places">
+<section class="shortcuts home-surface" class:collapsed aria-label="Your places">
   <SectionHeader title="Your places" count={`${data.loaded ? data.items.length : '—'} SHORTCUTS`}>
     {#snippet icon()}<featureIcons.shortcuts size={iconSizes.section}/>{/snippet}
-    {#snippet actions()}<button class="section-action" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={iconSizes.action}/>{managing ? 'Done' : 'Manage shortcuts'}</button>{/snippet}
+    {#snippet actions()}
+      <button class="section-action" class:active={managing} aria-expanded={managing} onclick={() => { managing = !managing; }} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}><Settings2 size={iconSizes.action}/>{managing ? 'Done' : 'Manage shortcuts'}</button>
+      <button type="button" class="section-icon-action" aria-label={collapsed ? 'Expand shortcuts' : 'Minimize shortcuts'} title={collapsed ? 'Expand shortcuts' : 'Minimize shortcuts'} aria-expanded={!collapsed} aria-controls={contentId} onclick={toggleMinimized} disabled={data.busy || editorOpen || serviceOpen || groupEditing !== null || drag !== null}>
+        {#if collapsed}<ChevronDown size={iconSizes.action}/>{:else}<ChevronUp size={iconSizes.action}/>{/if}
+      </button>
+    {/snippet}
   </SectionHeader>
 
   {#if data.error && !editorOpen}<p class="shortcut-error" role="alert">{data.error}<button onclick={() => store.refresh()} disabled={data.loading || data.busy}>Try again</button></p>{/if}
+  <div id={contentId} hidden={collapsed}>
   {#if !data.loaded}<p class="shortcut-status" role="status">{data.loading ? 'Loading your places...' : 'Your shortcuts are unavailable.'}</p>{/if}
 
   {#if !managing && selectedService && selectedAvailability}
@@ -400,9 +419,12 @@
       {@render card(draggedItem)}
     </div>
   {/if}
+  </div>
 </section>
 
 <style>
+  .shortcuts.collapsed { padding-block:12px; }
+  .shortcuts.collapsed :global(.section-heading) { margin-bottom:0; }
   .availability-option > span { display: flex; align-items: center; gap: 9px; }
   .availability-option input { width: 15px; height: 15px; accent-color: var(--highlight); }
   .availability-indicator { position: absolute; top: 7px; right: 6px; width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 7px; color: var(--muted); }
