@@ -319,6 +319,66 @@
       "key": "Workflow",
       "label": "Workflow",
       "keywords": "automation workflows integrations n8n node-red nodered"
+    },
+    {
+      "key": "Wallet",
+      "label": "Wallet",
+      "keywords": "sure personal finance finances money budget budgeting maybe actual firefly iii firefly-iii"
+    },
+    {
+      "key": "Landmark",
+      "label": "Bank",
+      "keywords": "bank banking accounts finance finances money investments"
+    },
+    {
+      "key": "PiggyBank",
+      "label": "Savings",
+      "keywords": "saving savings budget budgeting money personal finance actual"
+    },
+    {
+      "key": "CreditCard",
+      "label": "Credit card",
+      "keywords": "credit cards debit payments spending expenses finance finances"
+    },
+    {
+      "key": "Banknote",
+      "label": "Banknote",
+      "keywords": "cash money currency income salary finance finances"
+    },
+    {
+      "key": "Coins",
+      "label": "Coins",
+      "keywords": "money cash currency assets wealth finance finances"
+    },
+    {
+      "key": "Receipt",
+      "label": "Receipt",
+      "keywords": "receipts bills expenses spending transactions finance finances"
+    },
+    {
+      "key": "Calculator",
+      "label": "Calculator",
+      "keywords": "accounting calculate budget budgeting taxes finance finances"
+    },
+    {
+      "key": "ChartPie",
+      "label": "Pie chart",
+      "keywords": "portfolio allocation assets investments spending budget finance finances"
+    },
+    {
+      "key": "TrendingUp",
+      "label": "Trending up",
+      "keywords": "stocks investing investment markets growth economics finance finances"
+    },
+    {
+      "key": "HandCoins",
+      "label": "Income",
+      "keywords": "income payments cash flow lending donations finance finances"
+    },
+    {
+      "key": "CircleDollarSign",
+      "label": "Dollar",
+      "keywords": "dollar currency money costs prices finance finances"
     }
   ],
   "colors": [

@@ -10,6 +10,8 @@ import {
   HardDriveUpload, Archive, ServerCog, FolderSync, Headphones, Mic,
   Library, BookMarked, FileScan, StickyNote, ListChecks, Bell,
   Bot, HousePlug, Lightbulb, Workflow,
+  Wallet, Landmark, PiggyBank, CreditCard, Banknote, Coins,
+  Receipt, Calculator, ChartPie, TrendingUp, HandCoins, CircleDollarSign,
 } from '@lucide/svelte';
 import catalog from '../../backend/shortcut_catalog.json';
 
@@ -25,6 +27,8 @@ const icons = {
   Clapperboard, Radio, Camera, Wrench, Cable, Plug,
   HardDriveUpload, Archive, ServerCog, FolderSync, Headphones, Mic,
   Library, BookMarked, FileScan, StickyNote, ListChecks, Bell,
-  Bot, HousePlug, Lightbulb, Workflow
+  Bot, HousePlug, Lightbulb, Workflow,
+  Wallet, Landmark, PiggyBank, CreditCard, Banknote, Coins,
+  Receipt, Calculator, ChartPie, TrendingUp, HandCoins, CircleDollarSign
 };
 export function shortcutIcon(name: string) { return icons[name as keyof typeof icons] ?? Link; }
