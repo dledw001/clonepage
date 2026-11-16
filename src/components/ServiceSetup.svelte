@@ -131,7 +131,7 @@
   .domain-input { display: flex; align-items: center; gap: 8px; }
   .domain-input input { flex: 1; }
   .domain-input span { color: var(--muted); font-size: var(--font-small); white-space: nowrap; }
-  .appearance { display: grid; grid-template-columns: minmax(0, 1fr) 185px; gap: 25px; margin-top: 22px; }
+  .appearance { display: grid; align-items: start; grid-template-columns: minmax(0, 1fr) 185px; gap: 25px; margin-top: 22px; }
   .icon-search { padding-left: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; color: var(--muted); }
   .icon-search input { border: 0; }
   .icons { display: grid; grid-template-columns: repeat(auto-fill,minmax(40px,1fr)); gap: 7px; margin: 12px 0 18px; max-height: 180px; overflow-y: auto; padding: 3px; }
@@ -141,6 +141,8 @@
   .colors > button { width: 23px; height: 23px; border-radius: 50%; color: var(--bg); padding: 0; display: grid; place-items: center; }
   .colors label { flex-direction: row; align-items: center; color: var(--muted); font-size: var(--font-caption); }
   .colors input { width: 30px; height: 28px; padding: 2px; }
+  .preview { min-width: 0; }
+  .preview .shortcut-card { height: auto; }
   .preview > span { display: block; font-size: var(--font-caption); letter-spacing: 1px; color: var(--muted); margin: 0 0 12px; }
   .form-actions { margin-top: 22px; justify-content: flex-end; }
   .review { margin-top: 24px; }
