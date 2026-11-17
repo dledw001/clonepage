@@ -163,7 +163,7 @@
   <div class="page">
     <header class="topbar" class:without-clock={!layoutState.settings.show_clock}>
       <a href="/" class="brand" aria-label="Clonepage home" onclick={event => navigate(event, '/')}>
-        <span class="brand-mark">✳</span>
+        <span class="brand-mark" aria-hidden="true"><img src="/favicon.svg" alt="" width="28" height="28" /></span>
         <span class="brand-label">clonepage<span class="brand-dot">.</span></span>
       </a>
 

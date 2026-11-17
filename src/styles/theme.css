@@ -164,6 +164,8 @@ button {
     font-size: 22px;
 }
 
+.brand-mark img { display:block; width:100%; height:auto; }
+
 .topbar {
     display:grid;
     grid-template-columns:auto auto minmax(0,1fr) auto;
