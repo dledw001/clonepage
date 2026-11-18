@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import main
 from economy import (INDICATORS, DAY, EconomyGateway, change_for, fred_timestamp, growth,
-                     initialize_economy, months_before, parse_csv, present, transformed)
+                     initialize_economy, months_before, parse_csv, present, transformed, fred_history_start, INCOMPLETE_HISTORY)
 
 NOW = datetime(2026, 11, 14, 12, tzinfo=timezone.utc)
 BY_ID = {item.id: item for item in INDICATORS}
@@ -232,6 +232,40 @@ class CalculationTests(unittest.TestCase):
         self.assertIsNone(fred_timestamp(b'<html>Maintenance</html>'))
 
 
+def fred_fixture(series_id, start, end, revision=0, mode='ok'):
+    indicator = BY_ID[series_id]
+    if mode == 'short' and series_id == 'SP500':
+        start = max(start, months_before(NOW.date(), 12))
+    last = min(end, NOW.date() - timedelta(days=1))
+    if mode == 'prefix' and series_id == 'SP500':
+        last = min(last, months_before(NOW.date(), 12))
+    if indicator.frequency in ('Monthly', 'Quarterly'):
+        last = min(last, date(2026, 10, 1))
+    rows = []
+    day = start
+    while day <= last:
+        native = (indicator.frequency == 'Daily' and day.weekday() < 5
+                  or indicator.frequency == 'Weekly' and day.weekday() == 5
+                  or indicator.frequency == 'Monthly' and day.day == 1
+                  or indicator.frequency == 'Quarterly' and day.day == 1 and day.month in (1, 4, 7, 10))
+        if native:
+            if mode == 'gap' and series_id == 'SP500' and day.year == 2022:
+                day += timedelta(days=1)
+                continue
+            if mode == 'tail' and series_id == 'SP500' and day >= NOW.date() - timedelta(days=30):
+                day += timedelta(days=1)
+                continue
+            if mode == 'missing-month' and series_id == 'UNRATE' and day == date(2025, 10, 1):
+                day += timedelta(days=1)
+                continue
+            value = 100 + revision if day == date(2025, 10, 1) else 103 if day == date(2026, 7, 1) else 105 if day == date(2026, 10, 1) else 100
+            if mode == 'null-revision' and series_id == 'SP500' and day == date(2026, 11, 13):
+                value = '.'
+            rows.append(f'{day.isoformat()},{value}')
+        day += timedelta(days=1)
+    return 'observation_date,' + series_id + '\n' + '\n'.join(rows) + '\n'
+
+
 class GatewayTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.stack = ExitStack()
@@ -270,13 +304,118 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
             if self.mode == 'malformed':return httpx.Response(200, content=b'<html>not CSV</html>')
             if self.mode == 'timeout':raise httpx.ReadTimeout('private connection detail', request=request)
             if self.mode == 'waiting':await asyncio.sleep(60)
-            body = 'observation_date,' + series_id + '\n2025-10-01,' + str(100 + self.revision) + '\n2026-07-01,103\n2026-10-01,105\n'
+            body = fred_fixture(series_id, date.fromisoformat(request.url.params['cosd']), date.fromisoformat(request.url.params['coed']), self.revision, self.mode)
             return httpx.Response(200, text=body)
         finally:
             self.in_flight -= 1
 
     def row(self, series_id='UNRATE'):
         with main.database() as db:return dict(db.execute('SELECT * FROM economic_series WHERE id=?', (series_id,)).fetchone())
+
+    async def test_explicit_windows_preserve_native_frequency_and_respect_rolling_limits(self):
+        for series_id, expected in [('SP500', '2020-10-14'), ('BAMLH0A0HYM2', '2023-11-14'), ('PCEPILFE', '2020-10-14')]:
+            await self.gateway.collect(BY_ID[series_id])
+            request = next(request for request in reversed(self.calls) if request.url.path.endswith('fredgraph.csv'))
+            self.assertEqual(dict(request.url.params), {'id':series_id, 'cosd':expected, 'coed':'2026-11-14'})
+            row = self.row(series_id)
+            self.assertIsNone(row['error'])
+            self.assertTrue(all(point['date'] >= expected for point in json.loads(row['observations'])))
+        monthly = json.loads(self.row('PCEPILFE')['observations'])
+        self.assertTrue(all(point['date'].endswith('-01') for point in monthly))
+
+    async def test_short_gapped_and_older_downloads_cannot_replace_good_history(self):
+        await self.gateway.collect(BY_ID['SP500'])
+        original = self.row('SP500')
+        self.now += timedelta(days=1)
+        for mode in ('short', 'gap', 'tail', 'prefix'):
+            with self.subTest(mode=mode):
+                self.mode = mode
+                await self.gateway.collect(BY_ID['SP500'])
+                failed = self.row('SP500')
+                for field in ('observations','fetched_at','fred_updated_at'):
+                    self.assertEqual(failed[field], original[field])
+                self.assertEqual(failed['error'], INCOMPLETE_HISTORY)
+                self.assertEqual(failed['checked_at'], self.now.isoformat())
+                self.assertEqual(failed['next_check_at'], (self.now + timedelta(hours=1)).isoformat())
+
+    async def test_first_download_must_cover_history_and_can_recover_on_retry(self):
+        for mode in ('short', 'prefix'):
+            self.mode = mode
+            await self.gateway.collect(BY_ID['SP500'])
+            failed = self.row('SP500')
+            self.assertIsNone(failed['observations'])
+            self.assertIsNone(failed['fetched_at'])
+            self.assertEqual(failed['error'], INCOMPLETE_HISTORY)
+        self.mode = 'ok'
+        self.now += timedelta(hours=1)
+        await self.gateway.collect(BY_ID['SP500'])
+        repaired = self.row('SP500')
+        self.assertIsNone(repaired['error'])
+        self.assertGreater(len(json.loads(repaired['observations'])), 1000)
+        self.assertEqual(repaired['fetched_at'], self.now.isoformat())
+
+    async def test_startup_repairs_legacy_truncated_history_without_deleting_it(self):
+        await self.gateway.refresh_due()
+        original = self.row('SP500')
+        short = [point for point in json.loads(original['observations']) if point['date'] >= '2025-11-14']
+        with main.database() as db:
+            db.execute('UPDATE economic_series SET observations=? WHERE id=?', (json.dumps(short), 'SP500'))
+        initialize_economy()
+        scheduled = self.row('SP500')
+        self.assertEqual(json.loads(scheduled['observations']), short)
+        self.assertEqual(scheduled['fetched_at'], original['fetched_at'])
+        self.assertIsNone(scheduled['next_check_at'])
+        self.assertEqual(scheduled['error'], INCOMPLETE_HISTORY)
+        self.calls.clear()
+        result = await self.gateway.snapshot()
+        self.assertTrue(result['refreshing'])
+        await self.gateway.task
+        self.assertEqual(len(self.calls), 2)
+        self.assertIsNone(self.row('SP500')['error'])
+        self.assertGreater(len(json.loads(self.row('SP500')['observations'])), 1000)
+
+    async def test_restarts_keep_the_retry_deadline_after_an_incomplete_repair(self):
+        await self.gateway.refresh_due()
+        self.mode = 'short'
+        await self.gateway.collect(BY_ID['SP500'])
+        failed = self.row('SP500')
+        initialize_economy()
+        self.assertEqual(self.row('SP500'), failed)
+        self.calls.clear()
+        await self.gateway.refresh_due()
+        self.assertEqual(self.calls, [])
+        self.now += timedelta(hours=1)
+        self.mode = 'ok'
+        await self.gateway.refresh_due()
+        self.assertEqual(len(self.calls), 2)
+        self.assertIsNone(self.row('SP500')['error'])
+
+    async def test_missing_months_and_null_revisions_are_accepted_without_filling(self):
+        await self.gateway.collect(BY_ID['UNRATE'])
+        self.mode = 'missing-month'
+        await self.gateway.collect(BY_ID['UNRATE'])
+        row = self.row('UNRATE')
+        self.assertIsNone(row['error'])
+        self.assertFalse(any(point['date'] == '2025-10-01' for point in json.loads(row['observations'])))
+        self.mode = 'ok'
+        await self.gateway.collect(BY_ID['SP500'])
+        self.mode = 'null-revision'
+        await self.gateway.collect(BY_ID['SP500'])
+        row = self.row('SP500')
+        self.assertIsNone(row['error'])
+        self.assertIsNone(json.loads(row['observations'])[-1]['value'])
+
+    async def test_rolling_history_expiration_is_not_mistaken_for_truncation(self):
+        indicator = BY_ID['BAMLH0A0HYM2']
+        await self.gateway.collect(indicator)
+        old = json.loads(self.row(indicator.id)['observations'])
+        self.now += timedelta(days=3)
+        await self.gateway.collect(indicator)
+        row = self.row(indicator.id)
+        self.assertIsNone(row['error'])
+        new = json.loads(row['observations'])
+        self.assertGreater(new[0]['date'], old[0]['date'])
+        self.assertGreaterEqual(new[0]['date'], fred_history_start(indicator,self.now.date()).isoformat())
 
     async def test_lazy_snapshot_starts_one_bounded_refresh_and_returns_immediately(self):
         first = await self.gateway.snapshot()

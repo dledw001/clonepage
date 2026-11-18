@@ -10,7 +10,7 @@ navigation grid for the four pages.
 
 No API key, account, new service, or environment variable is required. The API
 uses FRED's public native-frequency CSV downloads at
-`https://fred.stlouisfed.org/graph/fredgraph.csv?id=<series>` and retrieves the
+`https://fred.stlouisfed.org/graph/fredgraph.csv?id=<series>&cosd=<start>&coed=<end>` with an explicit date window and retrieves the
 publication timestamp from the public series page. Only the seventeen fixed FRED IDs
 can be fetched. Auto-loan delinquency comes from the New York Fed report; all
 requests use verified HTTPS, bounded responses, timeouts, and
@@ -24,11 +24,27 @@ every minute even when no browser is open. A browser poll reads the local cache;
 it does not bypass the daily FRED cache. The Refresh button refreshes that local
 snapshot and starts only checks already due.
 
-Every successful check replaces retained history, so historical revisions are
+Every complete, validated check replaces retained history, so historical revisions are
 picked up. About six years of raw levels are retained to supply five years of
 YoY growth, with enough lookback for all other transformations. ICE's high-yield
 series is restricted to the rolling three-year history window; history is not
 accumulated to work around FRED's limit.
+
+Before replacing a FRED cache, the collector checks that the download reaches
+its requested starting boundary, has no unexpectedly large internal gaps for
+its native frequency, and reaches a recent publication window without ending
+before previously cached dates. Generous release-lag allowances accommodate
+unreleased monthly and quarterly observations. Weekends,
+holidays, isolated missing periods, and revised null values remain supported;
+missing observations are never filled. Incomplete downloads keep the previous
+observations and publication/download timestamps, show an incomplete-history
+error, and retry after one hour. The request and stored cache both respect a
+series' rolling history allowance, including ICE's three-year window.
+
+On startup, an existing FRED cache with incomplete coverage is marked for an
+immediate background repair. Its observations remain visible until a complete
+download replaces them. Failed repairs retain their hourly retry deadline
+across API restarts; a complete cache keeps its normal daily schedule.
 
 Initial downloads run in the background. The API responds immediately and cards
 populate as each series finishes. Per-series failures keep the last successful

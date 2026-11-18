@@ -19,6 +19,11 @@ router = APIRouter(prefix="/api/economy", tags=["Economics"])
 DAY = 86400
 RETRY_SECONDS = 3600
 MAX_BYTES = 2 * 1024 * 1024
+HISTORY_MONTHS = 73
+INCOMPLETE_HISTORY = "FRED returned incomplete history. Previous observations are kept; retry scheduled."
+# Start-boundary tolerance, maximum internal gap, and generous publication lag (days).
+# Null rows and unreleased monthly/quarterly periods need no invented observations.
+HISTORY_TOLERANCE = {"Daily": (10, 14, 14), "Weekly": (14, 28, 35), "Monthly": (45, 93, 180), "Quarterly": (100, 200, 370)}
 FRED = "https://fred.stlouisfed.org"
 
 
@@ -82,6 +87,17 @@ def initialize_economy():
             if name not in columns:
                 db.execute(f"ALTER TABLE economic_series ADD COLUMN {name} TEXT")
         db.executemany("INSERT OR IGNORE INTO economic_series(id) VALUES (?)", [(item.id,) for item in INDICATORS])
+        # Repair old truncated caches once. Failed repairs retain their normal retry deadline.
+        for indicator in INDICATORS:
+            if indicator.provider != "fred":
+                continue
+            row = db.execute("SELECT observations, fetched_at, error FROM economic_series WHERE id=?", (indicator.id,)).fetchone()
+            if not row["observations"] or row["error"]:
+                continue
+            try:
+                validate_fred_history(indicator, json.loads(row["observations"]), datetime.fromisoformat(row["fetched_at"]).date())
+            except (ValueError, TypeError, KeyError):
+                db.execute("UPDATE economic_series SET next_check_at=NULL,error=? WHERE id=?", (INCOMPLETE_HISTORY, indicator.id))
 
 
 def months_before(day, months):
@@ -89,6 +105,33 @@ def months_before(day, months):
     year, month = divmod(total, 12)
     month += 1
     return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+class IncompleteHistory(ValueError):
+    """A syntactically valid CSV does not cover the requested history."""
+
+
+def fred_history_start(indicator, today):
+    months = min(HISTORY_MONTHS, indicator.history_limit * 12) if indicator.history_limit else HISTORY_MONTHS
+    return months_before(today, months)
+
+
+def validate_fred_history(indicator, observations, today, previous=()):
+    start = fred_history_start(indicator, today)
+    rows = [row for row in observations if start.isoformat() <= row["date"] <= today.isoformat()]
+    valid = [row for row in rows if row["value"] is not None]
+    first_tolerance, gap_tolerance, release_lag = HISTORY_TOLERANCE[indicator.frequency]
+    if not valid or date.fromisoformat(valid[0]["date"]) > start + timedelta(days=first_tolerance):
+        raise IncompleteHistory("Missing beginning of requested history")
+    dates = [date.fromisoformat(row["date"]) for row in rows]
+    if dates[-1] < today - timedelta(days=release_lag):
+        raise IncompleteHistory("Download ends before the expected publication window")
+    if any((later - earlier).days > gap_tolerance for earlier, later in zip(dates, dates[1:])):
+        raise IncompleteHistory("Unexpected gap in requested history")
+    # Null revisions are allowed; dropping the dates themselves must not truncate the cache.
+    old_dates = [row["date"] for row in previous if start.isoformat() <= row["date"] <= today.isoformat()]
+    if old_dates and rows[-1]["date"] < max(old_dates):
+        raise IncompleteHistory("Download ends before cached observations")
 
 
 def growth(current, previous, power=1):
@@ -264,9 +307,15 @@ class EconomyGateway:
                     data_url = report_url(await self.read(REPORT_PAGE), stamp.date())
                     observations, published_month = await asyncio.to_thread(parse_auto_workbook, await self.read(data_url), stamp.date())
                 else:
-                    observations = parse_csv(await self.read(FRED + "/graph/fredgraph.csv", {"id": indicator.id}), indicator.id, stamp.date())
-                cutoff = months_before(stamp.date(), 73).isoformat()
+                    params = {"id": indicator.id, "cosd": fred_history_start(indicator, stamp.date()).isoformat(), "coed": stamp.date().isoformat()}
+                    observations = parse_csv(await self.read(FRED + "/graph/fredgraph.csv", params), indicator.id, stamp.date())
+                cutoff = (fred_history_start(indicator, stamp.date()) if indicator.provider == "fred"
+                          else months_before(stamp.date(), HISTORY_MONTHS)).isoformat()
                 observations = [point for point in observations if point["date"] >= cutoff]
+                if indicator.provider == "fred":
+                    with database() as db:
+                        previous = db.execute("SELECT observations FROM economic_series WHERE id=?", (indicator.id,)).fetchone()
+                    validate_fred_history(indicator, observations, stamp.date(), json.loads(previous[0]) if previous and previous[0] else ())
                 updated = None
                 try:
                     if indicator.provider == "fred":
@@ -288,7 +337,9 @@ class EconomyGateway:
                                (stamp + timedelta(seconds=DAY)).isoformat(), warning, published_month, data_url, indicator.id))
             except (httpx.HTTPError, ValueError, TypeError, KeyError, UnicodeError) as exc:
                 provider = "New York Fed" if indicator.provider == "nyfed" else "FRED"
-                if isinstance(exc, httpx.HTTPStatusError):
+                if isinstance(exc, IncompleteHistory):
+                    error = INCOMPLETE_HISTORY
+                elif isinstance(exc, httpx.HTTPStatusError):
                     error = f"{provider} returned HTTP {exc.response.status_code}."
                 elif isinstance(exc, httpx.TimeoutException):
                     error = f"{provider} did not respond in time."
